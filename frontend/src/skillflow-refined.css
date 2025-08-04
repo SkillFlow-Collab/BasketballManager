@@ -1,0 +1,119 @@
+/* SkillFlow - Design Stade Rochelais simplifié */
+
+:root {
+  --sr-gold: #FFD700;
+  --sr-black: #1a1a1a;
+  --sr-white: #ffffff;
+  --sr-gray: #f8f9fa;
+}
+
+/* Navigation */
+nav {
+  background: linear-gradient(135deg, var(--sr-black) 0%, #2d2d2d 100%) !important;
+  border-bottom: 3px solid var(--sr-gold) !important;
+}
+
+nav h1 {
+  color: var(--sr-gold) !important;
+}
+
+nav img {
+  height: 40px !important;
+  width: auto !important;
+}
+
+/* Liens de navigation */
+.nav-item {
+  color: white !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  transition: all 0.3s ease !important;
+}
+
+.nav-item:hover,
+.nav-item-active {
+  background: var(--sr-gold) !important;
+  color: var(--sr-black) !important;
+}
+
+/* Boutons */
+button,
+.btn-primary {
+  background: var(--sr-gold) !important;
+  color: var(--sr-black) !important;
+  border: none !important;
+  padding: 10px 20px !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+}
+
+button:hover {
+  background: #DAA520 !important;
+}
+
+/* Inputs */
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--sr-gold) !important;
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.2) !important;
+}
+
+/* Cards */
+.stats-card,
+.bg-gradient-to-br {
+  border-radius: 16px !important;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.15) !important;
+}
+
+.stats-card-total,
+.bg-gradient-to-br.from-blue-500.to-blue-600 {
+  background: linear-gradient(135deg, var(--sr-gold) 0%, #DAA520 100%) !important;
+  color: var(--sr-black) !important;
+}
+
+/* Remplace les couleurs bleues */
+.text-blue-500,
+.text-blue-600 {
+  color: var(--sr-gold) !important;
+}
+
+.bg-blue-500 {
+  background: var(--sr-gold) !important;
+  color: var(--sr-black) !important;
+}
+
+.border-blue-500 {
+  border-color: var(--sr-gold) !important;
+}
+
+/* Page de connexion */
+.min-h-screen.flex.items-center.justify-center {
+  background: linear-gradient(135deg, var(--sr-gray) 0%, var(--sr-white) 100%) !important;
+}
+
+.bg-white.rounded-2xl.shadow-xl {
+  border: 2px solid var(--sr-gold) !important;
+}
+
+/* Layout responsive */
+.max-w-7xl {
+  max-width: 100% !important;
+  padding: 0 1rem !important;
+}
+
+.grid {
+  gap: 1rem !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  nav img {
+    height: 32px !important;
+  }
+  
+  .nav-item {
+    padding: 6px 12px !important;
+    font-size: 0.9rem !important;
+  }
+}

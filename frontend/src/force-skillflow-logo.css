@@ -1,0 +1,82 @@
+/* FORCE L'AFFICHAGE DU LOGO SKILLFLOW IMMÉDIATEMENT */
+
+/* Remplace TOUS les logos par votre logo SKILLFLOW */
+* {
+    /* Force le logo partout */
+}
+
+/* Logo de connexion - REMPLACEMENT IMMÉDIAT */
+.bg-gray-900.rounded-xl.px-6.py-4.mb-2,
+.skillflow-logo,
+div[class*="skillflow"] {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150" viewBox="0 0 300 150"><rect width="300" height="150" fill="%232a2a2a"/><circle cx="80" cy="60" r="20" fill="%23FFD700"/><circle cx="80" cy="60" r="16" fill="none" stroke="%23000" stroke-width="2"/><path d="M65,45 Q80,35 95,45" stroke="%23000" stroke-width="2" fill="none"/><path d="M65,75 Q80,85 95,75" stroke="%23000" stroke-width="2" fill="none"/><line x1="60" y1="60" x2="100" y2="60" stroke="%23000" stroke-width="2"/><path d="M100,60 Q130,45 160,60 Q190,75 220,60 Q250,45 280,60" stroke="%23FFD700" stroke-width="6" fill="none" stroke-linecap="round"/><text x="150" y="120" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="%23FFD700" text-anchor="middle">SKILLFLOW</text><circle cx="260" cy="120" r="12" fill="%23FFD700"/><text x="260" y="125" font-family="Arial" font-size="6" font-weight="bold" fill="%23000" text-anchor="middle">SR</text></svg>') !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    width: 300px !important;
+    height: 150px !important;
+    color: transparent !important;
+}
+
+/* Navigation - FORCE LE LOGO */
+nav img,
+nav .skillflow-logo,
+nav div[class*="logo"] {
+    content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80" viewBox="0 0 200 80"><rect width="200" height="80" fill="%232a2a2a"/><circle cx="50" cy="40" r="15" fill="%23FFD700"/><circle cx="50" cy="40" r="12" fill="none" stroke="%23000" stroke-width="1.5"/><path d="M38,28 Q50,22 62,28" stroke="%23000" stroke-width="1.5" fill="none"/><path d="M38,52 Q50,58 62,52" stroke="%23000" stroke-width="1.5" fill="none"/><line x1="35" y1="40" x2="65" y2="40" stroke="%23000" stroke-width="1.5"/><path d="M65,40 Q85,30 105,40 Q125,50 145,40 Q165,30 185,40" stroke="%23FFD700" stroke-width="4" fill="none" stroke-linecap="round"/><text x="100" y="65" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="%23FFD700" text-anchor="middle">SKILLFLOW</text></svg>') !important;
+    width: auto !important;
+    height: 60px !important;
+    max-width: 200px !important;
+}
+
+/* FORCE LE REMPLACEMENT DE TOUTES LES IMAGES DE LOGO */
+img[alt*="Stade"],
+img[src*="stade"],
+img[alt*="logo"],
+img[src*="logo"] {
+    content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80" viewBox="0 0 200 80"><rect width="200" height="80" fill="%232a2a2a"/><circle cx="50" cy="40" r="15" fill="%23FFD700"/><circle cx="50" cy="40" r="12" fill="none" stroke="%23000" stroke-width="1.5"/><path d="M38,28 Q50,22 62,28" stroke="%23000" stroke-width="1.5" fill="none"/><path d="M38,52 Q50,58 62,52" stroke="%23000" stroke-width="1.5" fill="none"/><line x1="35" y1="40" x2="65" y2="40" stroke="%23000" stroke-width="1.5"/><path d="M65,40 Q85,30 105,40 Q125,50 145,40 Q165,30 185,40" stroke="%23FFD700" stroke-width="4" fill="none" stroke-linecap="round"/><text x="100" y="65" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="%23FFD700" text-anchor="middle">SKILLFLOW</text></svg>') !important;
+    width: auto !important;
+    height: 60px !important;
+}
+
+/* Masque le texte SKILLFLOW CSS et remplace par l'image */
+.text-yellow-400.font-bold.text-xl.tracking-wider {
+    display: none !important;
+}
+
+.skillflow-text {
+    display: none !important;
+}
+
+.skillflow-ball {
+    display: none !important;
+}
+
+/* Force l'affichage du logo après le CSS existant */
+.skillflow-logo::after {
+    content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80" viewBox="0 0 200 80"><rect width="200" height="80" fill="%232a2a2a"/><circle cx="50" cy="40" r="15" fill="%23FFD700"/><circle cx="50" cy="40" r="12" fill="none" stroke="%23000" stroke-width="1.5"/><path d="M38,28 Q50,22 62,28" stroke="%23000" stroke-width="1.5" fill="none"/><path d="M38,52 Q50,58 62,52" stroke="%23000" stroke-width="1.5" fill="none"/><line x1="35" y1="40" x2="65" y2="40" stroke="%23000" stroke-width="1.5"/><path d="M65,40 Q85,30 105,40 Q125,50 145,40 Q165,30 185,40" stroke="%23FFD700" stroke-width="4" fill="none" stroke-linecap="round"/><text x="100" y="65" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="%23FFD700" text-anchor="middle">SKILLFLOW</text></svg>') !important;
+    display: block !important;
+    width: 200px !important;
+    height: 80px !important;
+}
+
+/* TITRE DE LA PAGE */
+title {
+    text: "SKILLFLOW - Basketball Manager" !important;
+}
+
+/* FORCE TOUT LE CONTENU CSS EXISTANT À DISPARAÎTRE */
+.bg-gray-900.rounded-xl.px-6.py-4.mb-2 * {
+    display: none !important;
+}
+
+/* Et remplace par votre logo */
+.bg-gray-900.rounded-xl.px-6.py-4.mb-2::before {
+    content: "";
+    display: block !important;
+    width: 300px !important;
+    height: 150px !important;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150" viewBox="0 0 300 150"><rect width="300" height="150" fill="%232a2a2a"/><circle cx="80" cy="60" r="20" fill="%23FFD700"/><circle cx="80" cy="60" r="16" fill="none" stroke="%23000" stroke-width="2"/><path d="M65,45 Q80,35 95,45" stroke="%23000" stroke-width="2" fill="none"/><path d="M65,75 Q80,85 95,75" stroke="%23000" stroke-width="2" fill="none"/><line x1="60" y1="60" x2="100" y2="60" stroke="%23000" stroke-width="2"/><path d="M100,60 Q130,45 160,60 Q190,75 220,60 Q250,45 280,60" stroke="%23FFD700" stroke-width="6" fill="none" stroke-linecap="round"/><text x="150" y="120" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="%23FFD700" text-anchor="middle">SKILLFLOW</text><circle cx="260" cy="120" r="12" fill="%23FFD700"/><text x="260" y="125" font-family="Arial" font-size="6" font-weight="bold" fill="%23000" text-anchor="middle">SR</text></svg>') !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+}

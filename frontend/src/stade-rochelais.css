@@ -1,0 +1,180 @@
+/* Couleurs Stade Rochelais */
+:root {
+  --sr-yellow: #FFD700;
+  --sr-gold: #FFC000;
+  --sr-black: #1a1a1a;
+  --sr-dark-gray: #2a2a2a;
+  --sr-light-gray: #f8f9fa;
+}
+
+/* Classes utilitaires Stade Rochelais */
+.bg-sr-yellow { background-color: var(--sr-yellow); }
+.bg-sr-gold { background-color: var(--sr-gold); }
+.bg-sr-black { background-color: var(--sr-black); }
+.bg-sr-dark-gray { background-color: var(--sr-dark-gray); }
+
+.text-sr-yellow { color: var(--sr-yellow); }
+.text-sr-gold { color: var(--sr-gold); }
+.text-sr-black { color: var(--sr-black); }
+.text-sr-dark-gray { color: var(--sr-dark-gray); }
+
+.border-sr-yellow { border-color: var(--sr-yellow); }
+.border-sr-gold { border-color: var(--sr-gold); }
+.border-sr-black { border-color: var(--sr-black); }
+
+/* Hover states */
+.hover-sr-yellow:hover { background-color: var(--sr-gold); }
+.hover-sr-gold:hover { background-color: var(--sr-yellow); }
+
+/* Gradient backgrounds */
+.bg-gradient-sr {
+  background: linear-gradient(135deg, var(--sr-gold) 0%, var(--sr-yellow) 100%);
+}
+
+.bg-gradient-sr-dark {
+  background: linear-gradient(135deg, var(--sr-black) 0%, var(--sr-dark-gray) 100%);
+}
+
+/* Logo Skillflow */
+.skillflow-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.skillflow-ball {
+  width: 48px;
+  height: 48px;
+  background: var(--sr-yellow);
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skillflow-ball::before {
+  content: '';
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--sr-black);
+  border-radius: 50%;
+}
+
+.skillflow-ball::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 2px;
+  background: var(--sr-black);
+  border-radius: 1px;
+  box-shadow: 
+    0 -8px 0 var(--sr-black),
+    0 8px 0 var(--sr-black);
+  transform: rotate(45deg);
+}
+
+.skillflow-text {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--sr-yellow);
+  letter-spacing: 0.1em;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.sr-badge {
+  width: 32px;
+  height: 32px;
+  background: var(--sr-yellow);
+  color: var(--sr-black);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-top: 8px;
+}
+
+/* Navigation styling */
+.nav-sr {
+  background: linear-gradient(135deg, var(--sr-black) 0%, var(--sr-dark-gray) 100%);
+  border-bottom: 3px solid var(--sr-yellow);
+}
+
+.nav-item-sr {
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  text-decoration: none;
+}
+
+.nav-item-sr:hover {
+  background: var(--sr-yellow);
+  color: var(--sr-black);
+  transform: translateY(-2px);
+}
+
+.nav-item-sr.active {
+  background: var(--sr-yellow);
+  color: var(--sr-black);
+}
+
+/* Button styling */
+.btn-sr-primary {
+  background: var(--sr-yellow);
+  color: var(--sr-black);
+  border: none;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.btn-sr-primary:hover {
+  background: var(--sr-gold);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+}
+
+.btn-sr-secondary {
+  background: var(--sr-black);
+  color: var(--sr-yellow);
+  border: 2px solid var(--sr-yellow);
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.btn-sr-secondary:hover {
+  background: var(--sr-yellow);
+  color: var(--sr-black);
+}
+
+/* Card styling */
+.card-sr {
+  background: white;
+  border: 2px solid var(--sr-yellow);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.card-sr:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(255, 215, 0, 0.2);
+  border-color: var(--sr-gold);
+}
+
+/* Focus states */
+.focus-sr:focus {
+  outline: none;
+  ring: 2px solid var(--sr-yellow);
+  border-color: var(--sr-yellow);
+}

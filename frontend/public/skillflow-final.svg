@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+  <!-- Fond noir -->
+  <rect width="400" height="200" fill="#2a2a2a"/>
+  
+  <!-- Ballon de basket avec vague dynamique -->
+  <g transform="translate(80, 60)">
+    <!-- Ballon principal -->
+    <circle r="25" fill="#FFC107"/>
+    <circle r="20" fill="none" stroke="#000" stroke-width="2"/>
+    
+    <!-- Lignes du ballon -->
+    <path d="M-18,-18 Q0,-25 18,-18" stroke="#000" stroke-width="2.5" fill="none"/>
+    <path d="M-18,18 Q0,25 18,18" stroke="#000" stroke-width="2.5" fill="none"/>
+    <line x1="-22" y1="0" x2="22" y2="0" stroke="#000" stroke-width="2.5"/>
+  </g>
+  
+  <!-- Vague qui sort du ballon -->
+  <path d="M105,60 Q140,35 180,60 Q220,85 260,60 Q300,35 340,60 Q370,75 395,60" 
+        stroke="#FFC107" stroke-width="8" fill="none" stroke-linecap="round"/>
+  
+  <!-- Texte SKILLFLOW -->
+  <text x="200" y="140" font-family="Arial, sans-serif" font-size="36" font-weight="bold" 
+        fill="#FFC107" text-anchor="middle" letter-spacing="2px">SKILLFLOW</text>
+  
+  <!-- Badge Stade Rochelais -->
+  <g transform="translate(320, 160)">
+    <!-- Bouclier -->
+    <path d="M-15,-10 L15,-10 L15,5 L0,15 L-15,5 Z" fill="#FFC107" stroke="#000" stroke-width="1"/>
+    <!-- Texte STADE -->
+    <text x="0" y="-2" font-family="Arial" font-size="6" font-weight="bold" fill="#000" text-anchor="middle">STADE</text>
+    <!-- Texte ROCHELAIS -->
+    <text x="0" y="6" font-family="Arial" font-size="6" font-weight="bold" fill="#000" text-anchor="middle">ROCHELAIS</text>
+  </g>
+</svg>

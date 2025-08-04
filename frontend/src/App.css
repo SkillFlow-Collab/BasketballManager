@@ -1,0 +1,434 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Stade Rochelais Colors */
+:root {
+  --sr-yellow: #FFD700;
+  --sr-gold: #FFC000;
+  --sr-black: #1a1a1a;
+  --sr-dark-gray: #2a2a2a;
+  --sr-light-gray: #f8f9fa;
+  --text-dark: #1f2937;
+  --text-light: #6b7280;
+}
+
+.App {
+  text-align: left;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* Navigation styles */
+.nav-item {
+  @apply px-4 py-2 rounded-xl font-medium transition-all duration-200 hover:transform hover:scale-105;
+}
+
+.nav-item-active {
+  background: var(--sr-yellow) !important;
+  color: var(--sr-black) !important;
+  @apply shadow-lg shadow-yellow-400/30;
+  font-weight: 600;
+}
+
+.nav-item-inactive {
+  @apply text-white hover:bg-yellow-400 hover:text-black hover:shadow-lg hover:shadow-yellow-400/20;
+}
+
+/* Compact navigation styles - Style comme FAN ZONE */
+.nav-item-compact {
+  @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 hover:transform hover:scale-105 whitespace-nowrap;
+}
+
+.nav-item-active-compact {
+  background: #f5f5f5 !important;
+  color: #333 !important;
+  border: 2px solid transparent !important;
+  @apply shadow-md;
+  font-weight: 600;
+}
+
+.nav-item-inactive-compact {
+  background: transparent !important;
+  color: white !important;
+  border: 2px solid transparent !important;
+  @apply hover:bg-gray-700 hover:border-yellow-400;
+}
+
+/* Stats cards with gradients */
+.stats-card {
+  @apply p-6 rounded-2xl shadow-lg transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl;
+}
+
+.stats-card-total {
+  background: linear-gradient(135deg, var(--sr-yellow) 0%, var(--sr-gold) 100%);
+  color: var(--sr-black);
+}
+
+.stats-card-completed {
+  @apply bg-gradient-to-br from-green-500 to-green-600;
+}
+
+.stats-card-pending {
+  background: linear-gradient(135deg, var(--sr-gold) 0%, #f59e0b 100%);
+  color: var(--sr-black);
+}
+
+.stats-card-overdue {
+  @apply bg-gradient-to-br from-red-500 to-red-600;
+}
+
+/* Card hover effects */
+.card-hover {
+  @apply transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl;
+}
+
+/* Button styles */
+.btn-primary {
+  background: var(--sr-yellow);
+  color: var(--sr-black);
+  @apply px-6 py-3 rounded-xl font-medium transition-all duration-200 hover:transform hover:scale-105 shadow-lg;
+}
+
+.btn-primary:hover {
+  background: var(--sr-gold);
+}
+
+.btn-secondary {
+  @apply bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-medium transition-all duration-200 hover:transform hover:scale-105;
+}
+
+.btn-danger {
+  @apply bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl font-medium transition-all duration-200 hover:transform hover:scale-105;
+}
+
+/* Form styles */
+.form-input {
+  @apply w-full p-3 border border-gray-300 rounded-xl transition-all duration-200;
+}
+
+.form-input:focus {
+  @apply ring-2 border-transparent;
+  ring-color: var(--sr-yellow);
+  border-color: var(--sr-yellow);
+}
+
+.form-textarea {
+  @apply w-full p-3 border border-gray-300 rounded-xl transition-all duration-200 resize-none;
+}
+
+.form-textarea:focus {
+  @apply ring-2 border-transparent;
+  ring-color: var(--sr-yellow);
+  border-color: var(--sr-yellow);
+}
+
+.form-select {
+  @apply w-full p-3 border border-gray-300 rounded-xl transition-all duration-200 bg-white;
+}
+
+.form-select:focus {
+  @apply ring-2 border-transparent;
+  ring-color: var(--sr-yellow);
+  border-color: var(--sr-yellow);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sr-yellow);
+  @apply rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sr-gold);
+}
+
+/* Modal overlay */
+.modal-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50;
+}
+
+.modal-content {
+  @apply bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl transform transition-all duration-300;
+}
+
+/* Loading states */
+.loading-spinner {
+  @apply animate-spin rounded-full h-8 w-8 border-4 border-t-transparent;
+  border-color: var(--sr-yellow);
+  border-top-color: transparent;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+/* Stade Rochelais theme accents */
+.sr-primary-gradient {
+  background: linear-gradient(135deg, var(--sr-yellow) 0%, var(--sr-gold) 100%);
+}
+
+.sr-dark-gradient {
+  background: linear-gradient(135deg, var(--sr-black) 0%, var(--sr-dark-gray) 100%);
+}
+
+/* Basketball theme accents */
+.basketball-orange {
+  background: linear-gradient(135deg, #ea580c 0%, #dc2626 100%);
+}
+
+.court-green {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+}
+
+/* Responsive utilities */
+@media (max-width: 768px) {
+  .nav-item {
+    @apply px-3 py-2 text-sm;
+  }
+  
+  .stats-card {
+    @apply p-4;
+  }
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.6s ease-out;
+}
+
+/* Focus states for accessibility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  ring-color: var(--sr-yellow);
+}
+
+/* Status indicators */
+.status-active {
+  @apply bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.status-inactive {
+  @apply bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.status-warning {
+  background: #fef3c7;
+  color: var(--sr-black);
+  @apply px-3 py-1 rounded-full text-sm font-medium;
+}
+
+/* Table styles */
+.table-header {
+  @apply bg-gray-50 text-gray-700 font-semibold text-left px-4 py-3 rounded-t-xl;
+}
+
+.table-cell {
+  @apply px-4 py-3 border-b border-gray-200 text-gray-800;
+}
+
+/* Badge styles */
+.badge {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-sr {
+  background: var(--sr-yellow);
+  color: var(--sr-black);
+}
+
+.badge-green {
+  @apply bg-green-100 text-green-800;
+}
+
+.badge-yellow {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.badge-red {
+  @apply bg-red-100 text-red-800;
+}
+
+/* Custom utility classes */
+.text-shadow {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.glass-effect {
+  @apply bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30;
+}
+
+/* SR Logo styles */
+.skillflow-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.skillflow-ball {
+  width: 48px;
+  height: 48px;
+  background: var(--sr-yellow);
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skillflow-ball::before {
+  content: '';
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--sr-black);
+  border-radius: 50%;
+}
+
+.skillflow-ball::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 2px;
+  background: var(--sr-black);
+  border-radius: 1px;
+  box-shadow: 
+    0 -8px 0 var(--sr-black),
+    0 8px 0 var(--sr-black);
+  transform: rotate(45deg);
+}
+
+.skillflow-text {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--sr-yellow);
+  letter-spacing: 0.1em;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.sr-badge {
+  width: 32px;
+  height: 32px;
+  background: var(--sr-yellow);
+  color: var(--sr-black);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-top: 8px;
+}
+
+/* Enhanced SR Branding */
+.sr-logo-enhanced {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.sr-logo-enhanced:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 4px 8px rgba(255, 215, 0, 0.3));
+}
+
+.sr-title-gradient {
+  background: linear-gradient(135deg, var(--sr-yellow), #FFA500);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 3s ease-in-out infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Styles pour les boutons d'état des séances collectives */
+.attendance-button {
+  background: white !important;
+  border: 2px solid #d1d5db !important;
+  color: #374151 !important;
+  transition: all 0.2s ease !important;
+}
+
+.attendance-button:hover {
+  background: #f9fafb !important;
+  border-color: #fbbf24 !important;
+}
+
+.attendance-button.selected {
+  background: white !important;
+  border-color: #fbbf24 !important;
+  box-shadow: 0 1px 3px rgba(251, 191, 36, 0.3) !important;
+}
+
+/* Styles pour les sous-navigations - Style Stade Rochelais */
+.sub-nav-button {
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 0.75rem !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+  border: 2px solid transparent !important;
+}
+
+.sub-nav-button-active {
+  background: #f5f5f5 !important;
+  color: #333 !important;
+  border-color: #FFD700 !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  font-weight: 600 !important;
+}
+
+.sub-nav-button-inactive {
+  background: white !important;
+  color: #666 !important;
+  border-color: #e5e7eb !important;
+}
+
+.sub-nav-button-inactive:hover {
+  background: #f9fafb !important;
+  border-color: #fbbf24 !important;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-break {
+    page-break-before: always;
+  }
+}

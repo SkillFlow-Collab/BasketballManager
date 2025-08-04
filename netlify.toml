@@ -1,0 +1,22 @@
+# Configuration Netlify
+[build]
+  command = "cd frontend && yarn build"
+  publish = "frontend/build"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+# Redirections pour React Router
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers pour sécurité
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

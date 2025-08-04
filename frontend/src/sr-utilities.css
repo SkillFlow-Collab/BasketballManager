@@ -1,0 +1,154 @@
+/* Classes utilitaires pour les couleurs Stade Rochelais */
+
+/* Boutons principaux */
+.btn-sr-primary {
+  @apply bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-bold px-6 py-3 rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg;
+}
+
+.btn-sr-secondary {
+  @apply bg-gray-800 hover:bg-gray-900 text-yellow-400 border-2 border-yellow-400 px-6 py-3 rounded-xl transition-all duration-200 transform hover:scale-105 font-semibold;
+}
+
+.btn-sr-danger {
+  @apply bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl transition-all duration-200 transform hover:scale-105 font-medium;
+}
+
+/* Cartes joueurs */
+.card-sr-player {
+  @apply bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border-2 border-yellow-200 hover:border-yellow-400;
+}
+
+/* Inputs avec focus jaune */
+.input-sr {
+  @apply w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition-all duration-200;
+}
+
+/* Tableaux avec accents SR */
+.table-sr {
+  @apply bg-white rounded-xl overflow-hidden shadow-lg border-2 border-yellow-200;
+}
+
+.table-sr thead {
+  @apply bg-gray-800 text-yellow-400;
+}
+
+.table-sr th {
+  @apply px-6 py-4 text-left font-semibold;
+}
+
+.table-sr td {
+  @apply px-6 py-4 border-b border-gray-200;
+}
+
+.table-sr tbody tr:hover {
+  @apply bg-yellow-50;
+}
+
+/* Badges et statuts */
+.badge-sr-active {
+  @apply bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-sm font-bold;
+}
+
+.badge-sr-inactive {
+  @apply bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium;
+}
+
+/* Navigation tabs */
+.tab-sr-active {
+  @apply bg-yellow-400 text-gray-900 px-6 py-3 rounded-xl font-bold;
+}
+
+.tab-sr-inactive {
+  @apply bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-medium transition-colors;
+}
+
+/* Modales avec bordure SR */
+.modal-sr {
+  @apply bg-white rounded-2xl shadow-2xl border-4 border-yellow-400;
+}
+
+/* Alertes et notifications */
+.alert-sr-success {
+  @apply bg-green-50 border-l-4 border-green-400 text-green-800 p-4 rounded-r-xl;
+}
+
+.alert-sr-warning {
+  @apply bg-yellow-50 border-l-4 border-yellow-400 text-gray-800 p-4 rounded-r-xl;
+}
+
+.alert-sr-error {
+  @apply bg-red-50 border-l-4 border-red-400 text-red-800 p-4 rounded-r-xl;
+}
+
+/* Graphiques et charts */
+.chart-container-sr {
+  @apply bg-white rounded-2xl shadow-lg p-6 border-2 border-yellow-200;
+}
+
+/* Loading spinner SR */
+.spinner-sr {
+  @apply animate-spin rounded-full h-8 w-8 border-4 border-yellow-400 border-t-transparent;
+}
+
+/* Progress bars */
+.progress-sr {
+  @apply bg-gray-200 rounded-full h-2 overflow-hidden;
+}
+
+.progress-sr-fill {
+  @apply bg-gradient-to-r from-yellow-400 to-yellow-500 h-full rounded-full transition-all duration-300;
+}
+
+/* Hover effects spéciaux */
+.hover-lift:hover {
+  @apply transform -translate-y-2 shadow-xl;
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 20px rgba(255, 212, 0, 0.5);
+}
+
+/* Text gradients SR */
+.text-gradient-sr {
+  background: linear-gradient(45deg, #FFD700, #FFC000);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Background patterns */
+.bg-pattern-sr {
+  background-image: 
+    radial-gradient(circle at 20% 50%, rgba(255, 215, 0, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 192, 0, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 80%, rgba(255, 215, 0, 0.1) 0%, transparent 50%);
+}
+
+/* Animations SR */
+@keyframes pulse-sr {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-sr {
+  animation: pulse-sr 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes bounce-sr {
+  0%, 100% {
+    transform: translateY(-25%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+.animate-bounce-sr {
+  animation: bounce-sr 1s infinite;
+}

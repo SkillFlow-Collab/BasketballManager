@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+  <!-- Fond noir -->
+  <rect width="200" height="80" fill="#1a1a1a" rx="12"/>
+  
+  <!-- Ballon de basket -->
+  <circle cx="40" cy="40" r="20" fill="#FFD700"/>
+  <circle cx="40" cy="40" r="16" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="25" y1="25" x2="55" y2="55" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <line x1="25" y1="40" x2="55" y2="40" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <line x1="25" y1="55" x2="55" y2="25" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Vague stylisée -->
+  <path d="M70,40 Q85,25 100,40 T130,40" stroke="#FFD700" stroke-width="4" fill="none" stroke-linecap="round"/>
+  
+  <!-- Texte SKILLFLOW -->
+  <text x="145" y="45" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#FFD700" text-anchor="middle">SKILLFLOW</text>
+  
+  <!-- Badge SR -->
+  <circle cx="100" cy="90" r="12" fill="#FFD700"/>
+  <text x="100" y="95" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#1a1a1a" text-anchor="middle">SR</text>
+</svg>
