@@ -3,20 +3,13 @@
   "builds": [
     {
       "src": "server.py",
-      "use": "@vercel/python",
-      "config": { "runtime": "python3.9" }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/(.*)",
       "dest": "server.py"
     }
-  ],
-  "functions": {
-    "server.py": {
-      "maxDuration": 30,
-      "memory": 1024
-    }
-  }
+  ]
 }
