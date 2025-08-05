@@ -15,6 +15,8 @@ from datetime import datetime, date, timedelta
 import jwt
 import bcrypt
 from bson import ObjectId
+import uvicorn
+from mangum import Mangum
 
 # Add ObjectId encoder for JSON serialization
 ENCODERS_BY_TYPE[ObjectId] = str
@@ -350,6 +352,13 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
     if current_user.role != 'admin':
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
+
+
+# Call initialization on first request (or manage differently)
+@app.get("/init")
+async def init():
+    await initialize_data()
+    return {"message": "Initialization complete"}
 
 # Authentication endpoints
 @api_router.post("/auth/login", response_model=LoginResponse)
@@ -1939,13 +1948,12 @@ async def get_heatmap_data(current_user: User = Depends(get_current_user), days:
 app.include_router(api_router)
 
 # Startup event to initialize coaches, update themes and create admin user
-@app.on_event("startup")
+# Remove @app.on_event("startup") and @app.on_event("shutdown")
 async def initialize_data():
     # Check if admin user exists
     admin_user = await db.users.find_one({"role": "admin"})
     if not admin_user:
-        # Create default admin user
-        admin_password_hash = hash_password("admin123")  # Change this password!
+        admin_password_hash = hash_password("admin123")
         admin_user_data = {
             "id": str(uuid.uuid4()),
             "email": "admin@staderochelais.com",
@@ -1953,14 +1961,14 @@ async def initialize_data():
             "role": "admin",
             "first_name": "Admin",
             "last_name": "Stade Rochelais",
-            "must_change_password": False,  # Default admin doesn't need to change password
+            "must_change_password": False,
             "created_at": datetime.utcnow(),
             "last_login": None
         }
         await db.users.insert_one(admin_user_data)
         logger.info("Admin user created: admin@staderochelais.com / admin123")
     
-    # Check if coaches already exist
+    # Initialize coaches
     existing_coaches = await db.coaches.count_documents({})
     if existing_coaches == 0:
         # Create default coaches
@@ -2005,7 +2013,7 @@ async def initialize_data():
         await db.coaches.insert_many(default_coaches)
         logger.info("Coaches initialisés avec succès")
     
-    # Update theme names in existing sessions
+    # Update theme names
     try:
         await db.sessions.update_many(
             {"themes": {"$in": ["Écran et remise"]}},
@@ -2030,6 +2038,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# @app.on_event("shutdown")
+# async def shutdown_db_client():
+#     client.close()
+
+# Wrap FastAPI app with Mangum for AWS Lambda compatibility (used by Vercel)
+handler = Mangum(app, lifespan="off")
