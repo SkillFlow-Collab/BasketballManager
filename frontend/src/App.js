@@ -172,10 +172,13 @@ const isLocalhost =
 const LOCAL_BACKEND = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 
 // 👉 En prod on pointe vers le BACK (variable d'env Vercel FRONT)
-const PROD_BACKEND = process.env.REACT_APP_BACKEND_URL || 'https://basketball-manager-msoh.vercel.app';
+const PROD_BACKEND = (process.env.REACT_APP_BACKEND_URL && process.env.REACT_APP_BACKEND_URL.trim()) || 'https://basketball-manager-kappa.vercel.app';
 
 // Toutes les routes front appellent /api sur le domaine du BACK
 const API = isLocalhost ? `${LOCAL_BACKEND}/api` : `${PROD_BACKEND}/api`;
+if (typeof window !== 'undefined') {
+  console.log('[API CONFIG]', { isLocalhost, LOCAL_BACKEND, PROD_BACKEND, API });
+}
 
 // Auth Context
 const AuthContext = createContext();
