@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -42,6 +42,15 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+# DB ping helper for health endpoint
+async def db_ping():
+    try:
+        await db.command("ping")
+        return True, "ok"
+    except Exception as e:
+        logger.exception("DB ping failed: %s", e)
+        return False, str(e)
+
 # Security
 security = HTTPBearer(auto_error=False)
 
@@ -55,6 +64,14 @@ api_router = APIRouter(prefix="/api")
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
+
+# DB health endpoint
+@app.get("/api/health/db")
+async def health_db():
+    ok, msg = await db_ping()
+    if ok:
+        return {"db": "ok"}
+    raise HTTPException(status_code=500, detail=f"DB error: {msg}")
 
 # Define Models
 class User(BaseModel):
@@ -369,28 +386,33 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 # Authentication endpoints
 @api_router.post("/auth/login", response_model=LoginResponse)
 async def login(login_data: UserLogin):
-    user = await db.users.find_one({"email": login_data.email})
-    if not user or not verify_password(login_data.password, user['password_hash']):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    # Update last login
-    await db.users.update_one(
-        {"id": user['id']}, 
-        {"$set": {"last_login": datetime.utcnow()}}
-    )
-    
-    token = create_token(user)
-    user_response = UserResponse(
-        id=user['id'],
-        email=user['email'],
-        role=user['role'],
-        first_name=user['first_name'],
-        last_name=user['last_name'],
-        must_change_password=user.get('must_change_password', False),
-        last_login=user.get('last_login')
-    )
-    
-    return LoginResponse(token=token, user=user_response)
+    try:
+        user = await db.users.find_one({"email": login_data.email})
+        if not user or not verify_password(login_data.password, user['password_hash']):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        # Update last login
+        await db.users.update_one(
+            {"id": user['id']},
+            {"$set": {"last_login": datetime.utcnow()}}
+        )
+
+        token = create_token(user)
+        user_response = UserResponse(
+            id=user['id'],
+            email=user['email'],
+            role=user['role'],
+            first_name=user['first_name'],
+            last_name=user['last_name'],
+            must_change_password=user.get('must_change_password', False),
+            last_login=user.get('last_login')
+        )
+        return LoginResponse(token=token, user=user_response)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Login failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 class ResetAdminBody(BaseModel):
     email: Optional[str] = "admin@staderochelais.com"
@@ -400,48 +422,70 @@ class ResetAdminBody(BaseModel):
 
 @api_router.get("/dev/admin-status")
 async def admin_status(request: Request):
-    # Sécurisation simple: header x-admin-reset doit matcher la variable d'env ADMIN_RESET_TOKEN
-    if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    total = await db.users.count_documents({})
-    admin_doc = await db.users.find_one({"role": "admin"})
-    default_email_doc = await db.users.find_one({"email": "admin@staderochelais.com"})
-    return {
-        "total_users": total,
-        "has_admin": bool(admin_doc),
-        "has_default_email": bool(default_email_doc)
-    }
+    try:
+        if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        total = await db.users.count_documents({})
+        admin_doc = await db.users.find_one({"role": "admin"})
+        default_email_doc = await db.users.find_one({"email": "admin@staderochelais.com"})
+        return {
+            "total_users": total,
+            "has_admin": bool(admin_doc),
+            "has_default_email": bool(default_email_doc)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("admin-status error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Admin status error: {str(e)}")
 
 @api_router.post("/dev/reset-admin")
 async def dev_reset_admin(body: ResetAdminBody, request: Request):
-    # Sécurisation simple: header x-admin-reset doit matcher la variable d'env ADMIN_RESET_TOKEN
+    try:
+        if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        pwd_hash = hash_password(body.password)
+        now = datetime.utcnow()
+        existing = await db.users.find_one({"email": body.email})
+        data = {
+            "email": body.email,
+            "password_hash": pwd_hash,
+            "role": "admin",
+            "first_name": body.first_name,
+            "last_name": body.last_name,
+            "must_change_password": False,
+            "last_login": None,
+        }
+        if existing:
+            await db.users.update_one({"email": body.email}, {"$set": data})
+            user_id = existing.get("id")
+            action = "updated"
+        else:
+            new_user = {"id": str(uuid.uuid4()), **data, "created_at": now}
+            await db.users.insert_one(new_user)
+            user_id = new_user["id"]
+            action = "created"
+
+        logger.info("Admin %s via dev endpoint for email=%s", action, body.email)
+        return {"ok": True, "action": action, "user_id": user_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("reset-admin error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Reset admin error: {str(e)}")
+
+# Environment sanity-check endpoint
+@api_router.get("/dev/check-env")
+async def dev_check_env(request: Request):
     if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
         raise HTTPException(status_code=403, detail="Forbidden")
-
-    pwd_hash = hash_password(body.password)
-    now = datetime.utcnow()
-    existing = await db.users.find_one({"email": body.email})
-    data = {
-        "email": body.email,
-        "password_hash": pwd_hash,
-        "role": "admin",
-        "first_name": body.first_name,
-        "last_name": body.last_name,
-        "must_change_password": False,
-        "last_login": None,
+    return {
+        "MONGO_URL_set": bool(os.environ.get("MONGO_URL")),
+        "DB_NAME_set": bool(os.environ.get("DB_NAME")),
+        "JWT_SECRET_set": bool(JWT_SECRET and JWT_SECRET != "replace-me-in-prod"),
+        "ENVIRONMENT": ENVIRONMENT,
     }
-    if existing:
-        await db.users.update_one({"email": body.email}, {"$set": data})
-        user_id = existing.get("id")
-        action = "updated"
-    else:
-        new_user = {"id": str(uuid.uuid4()), **data, "created_at": now}
-        await db.users.insert_one(new_user)
-        user_id = new_user["id"]
-        action = "created"
-
-    logger.info("Admin %s via dev endpoint for email=%s", action, body.email)
-    return {"ok": True, "action": action, "user_id": user_id}
 
 @api_router.post("/auth/create-user", response_model=UserResponse)
 async def create_user(user_data: UserCreate, current_user: User = Depends(get_current_user)):
