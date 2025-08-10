@@ -5,6 +5,8 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from pydantic import BaseModel, Field
 from pydantic.json import ENCODERS_BY_TYPE
@@ -30,6 +32,10 @@ JWT_SECRET = (
 )
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_HOURS = 24
+
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'production')
+ADMIN_RESET_TOKEN = os.environ.get('ADMIN_RESET_TOKEN')  # à définir dans Vercel (backend)
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://basketball-manager-msoh.vercel.app')
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -385,6 +391,57 @@ async def login(login_data: UserLogin):
     )
     
     return LoginResponse(token=token, user=user_response)
+
+class ResetAdminBody(BaseModel):
+    email: Optional[str] = "admin@staderochelais.com"
+    password: Optional[str] = "admin123"
+    first_name: Optional[str] = "Admin"
+    last_name: Optional[str] = "Stade Rochelais"
+
+@api_router.get("/dev/admin-status")
+async def admin_status(request: Request):
+    # Sécurisation simple: header x-admin-reset doit matcher la variable d'env ADMIN_RESET_TOKEN
+    if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    total = await db.users.count_documents({})
+    admin_doc = await db.users.find_one({"role": "admin"})
+    default_email_doc = await db.users.find_one({"email": "admin@staderochelais.com"})
+    return {
+        "total_users": total,
+        "has_admin": bool(admin_doc),
+        "has_default_email": bool(default_email_doc)
+    }
+
+@api_router.post("/dev/reset-admin")
+async def dev_reset_admin(body: ResetAdminBody, request: Request):
+    # Sécurisation simple: header x-admin-reset doit matcher la variable d'env ADMIN_RESET_TOKEN
+    if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    pwd_hash = hash_password(body.password)
+    now = datetime.utcnow()
+    existing = await db.users.find_one({"email": body.email})
+    data = {
+        "email": body.email,
+        "password_hash": pwd_hash,
+        "role": "admin",
+        "first_name": body.first_name,
+        "last_name": body.last_name,
+        "must_change_password": False,
+        "last_login": None,
+    }
+    if existing:
+        await db.users.update_one({"email": body.email}, {"$set": data})
+        user_id = existing.get("id")
+        action = "updated"
+    else:
+        new_user = {"id": str(uuid.uuid4()), **data, "created_at": now}
+        await db.users.insert_one(new_user)
+        user_id = new_user["id"]
+        action = "created"
+
+    logger.info("Admin %s via dev endpoint for email=%s", action, body.email)
+    return {"ok": True, "action": action, "user_id": user_id}
 
 @api_router.post("/auth/create-user", response_model=UserResponse)
 async def create_user(user_data: UserCreate, current_user: User = Depends(get_current_user)):
@@ -1950,6 +2007,7 @@ app.include_router(api_router)
 # Startup event to initialize coaches, update themes and create admin user
 @app.on_event("startup")
 async def initialize_data():
+    logger.info("Startup: ENV=%s DB_NAME=%s", ENVIRONMENT, os.environ.get('DB_NAME'))
     # Check if admin user exists
     admin_user = await db.users.find_one({"role": "admin"})
     if not admin_user:
