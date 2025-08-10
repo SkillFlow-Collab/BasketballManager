@@ -67,7 +67,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=r"^https://.*\.vercel\.app$",
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With", "x-admin-reset"],
     expose_headers=["*"],
@@ -386,13 +386,17 @@ def decode_token(token: str) -> dict:
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    payload = decode_token(credentials.credentials)
-    user = await db.users.find_one({"id": payload['user_id']})
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    
-    return User(**user)
+
+    client_local = AsyncIOMotorClient(mongo_url)
+    database = client_local[DB_NAME]
+    try:
+        payload = decode_token(credentials.credentials)
+        user = await database.users.find_one({"id": payload['user_id']})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return User(**user)
+    finally:
+        client_local.close()
 
 async def get_admin_user(current_user: User = Depends(get_current_user)):
     if current_user.role != 'admin':
