@@ -39,8 +39,9 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://basketball-manager-msoh.v
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
+DB_NAME = os.environ['DB_NAME']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[DB_NAME]
 
 # DB ping helper for health endpoint
 async def db_ping():
@@ -386,13 +387,15 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 # Authentication endpoints
 @api_router.post("/auth/login", response_model=LoginResponse)
 async def login(login_data: UserLogin):
+    client_local = AsyncIOMotorClient(mongo_url)
+    database = client_local[DB_NAME]
     try:
-        user = await db.users.find_one({"email": login_data.email})
+        user = await database.users.find_one({"email": login_data.email})
         if not user or not verify_password(login_data.password, user['password_hash']):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         # Update last login
-        await db.users.update_one(
+        await database.users.update_one(
             {"id": user['id']},
             {"$set": {"last_login": datetime.utcnow()}}
         )
@@ -413,6 +416,8 @@ async def login(login_data: UserLogin):
     except Exception as e:
         logger.exception("Login failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+    finally:
+        client_local.close()
 
 class ResetAdminBody(BaseModel):
     email: Optional[str] = "admin@staderochelais.com"
@@ -422,12 +427,14 @@ class ResetAdminBody(BaseModel):
 
 @api_router.get("/dev/admin-status")
 async def admin_status(request: Request):
+    client_local = AsyncIOMotorClient(mongo_url)
+    database = client_local[DB_NAME]
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
-        total = await db.users.count_documents({})
-        admin_doc = await db.users.find_one({"role": "admin"})
-        default_email_doc = await db.users.find_one({"email": "admin@staderochelais.com"})
+        total = await database.users.count_documents({})
+        admin_doc = await database.users.find_one({"role": "admin"})
+        default_email_doc = await database.users.find_one({"email": "admin@staderochelais.com"})
         return {
             "total_users": total,
             "has_admin": bool(admin_doc),
@@ -438,16 +445,20 @@ async def admin_status(request: Request):
     except Exception as e:
         logger.exception("admin-status error: %s", e)
         raise HTTPException(status_code=500, detail=f"Admin status error: {str(e)}")
+    finally:
+        client_local.close()
 
 @api_router.post("/dev/reset-admin")
 async def dev_reset_admin(body: ResetAdminBody, request: Request):
+    client_local = AsyncIOMotorClient(mongo_url)
+    database = client_local[DB_NAME]
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
 
         pwd_hash = hash_password(body.password)
         now = datetime.utcnow()
-        existing = await db.users.find_one({"email": body.email})
+        existing = await database.users.find_one({"email": body.email})
         data = {
             "email": body.email,
             "password_hash": pwd_hash,
@@ -458,12 +469,12 @@ async def dev_reset_admin(body: ResetAdminBody, request: Request):
             "last_login": None,
         }
         if existing:
-            await db.users.update_one({"email": body.email}, {"$set": data})
+            await database.users.update_one({"email": body.email}, {"$set": data})
             user_id = existing.get("id")
             action = "updated"
         else:
             new_user = {"id": str(uuid.uuid4()), **data, "created_at": now}
-            await db.users.insert_one(new_user)
+            await database.users.insert_one(new_user)
             user_id = new_user["id"]
             action = "created"
 
@@ -474,6 +485,8 @@ async def dev_reset_admin(body: ResetAdminBody, request: Request):
     except Exception as e:
         logger.exception("reset-admin error: %s", e)
         raise HTTPException(status_code=500, detail=f"Reset admin error: {str(e)}")
+    finally:
+        client_local.close()
 
 # Environment sanity-check endpoint
 @api_router.get("/dev/check-env")
