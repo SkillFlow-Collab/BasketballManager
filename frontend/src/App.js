@@ -164,9 +164,18 @@ const EVALUATION_THEMES = [
 
 // API base: in production we go through a Vercel rewrite to avoid CORS ("/api"),
 // in local dev we use the explicit backend URL (from .env) or fallback to localhost:8000.
-const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+// Prod = domaine du back ; Dev = .env local ou localhost:8000
+const isLocalhost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
 const LOCAL_BACKEND = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
-const API = isLocalhost ? `${LOCAL_BACKEND}/api` : '/api';
+
+// 👉 En prod on pointe vers le BACK (variable d'env Vercel FRONT)
+const PROD_BACKEND = process.env.REACT_APP_BACKEND_URL || 'https://basketball-manager-msoh.vercel.app';
+
+// Toutes les routes front appellent /api sur le domaine du BACK
+const API = isLocalhost ? `${LOCAL_BACKEND}/api` : `${PROD_BACKEND}/api`;
 
 // Auth Context
 const AuthContext = createContext();
@@ -189,7 +198,15 @@ const AuthProvider = ({ children }) => {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       axios.get(`${API}/auth/me`)
         .then(response => setUser(response.data))
-        .catch(() => {
+        .catch((err) => {
+          console.error('Auth/me error:', {
+            url: `${API}/auth/me`,
+            method: 'GET',
+            status: err.response?.status,
+            statusText: err.response?.statusText,
+            data: err.response?.data,
+            headers: err.response?.headers
+          });
           localStorage.removeItem('token');
           delete axios.defaults.headers.common['Authorization'];
         })
@@ -214,9 +231,20 @@ const AuthProvider = ({ children }) => {
       
       return { success: true };
     } catch (error) {
-      return { 
-        success: false, 
-        message: error.response?.data?.detail || 'Erreur de connexion' 
+      console.error('Login error:', {
+        url: `${API}/auth/login`,
+        method: 'POST',
+        payload: { email, password: '[REDACTED]' },
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        headers: error.response?.headers
+      });
+      return {
+        success: false,
+        message:
+          error.response?.data?.detail ||
+          (typeof error.response?.data === 'string' ? error.response.data : 'Erreur de connexion')
       };
     }
   };

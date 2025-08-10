@@ -23,7 +23,11 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'stade-rochelais-basketball-secret-2025')
+JWT_SECRET = (
+    os.environ.get('JWT_SECRET') or
+    os.environ.get('JWT_SECRET_KEY') or
+    'replace-me-in-prod'  # fallback only for local/dev
+)
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_HOURS = 24
 
@@ -40,6 +44,11 @@ app = FastAPI()
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+
+# Lightweight health endpoint for debugging
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}
 
 # Define Models
 class User(BaseModel):
@@ -2015,10 +2024,17 @@ async def initialize_data():
     except Exception as e:
         logger.error(f"Erreur lors de la mise à jour des thèmes: {e}")
 
+# CORS configuration
+ALLOWED_ORIGINS = [
+    "https://basketball-manager-msoh.vercel.app",  # frontend (production)
+    "http://localhost:3000",                       # frontend (local dev)
+]
+
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://basketball-manager-msoh-.*\.vercel\.app",  # preview URLs
     allow_credentials=True,
-    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
