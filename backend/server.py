@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -68,9 +69,10 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "x-admin-reset"],
+    allow_methods=["*"],
+    allow_headers=["*"],
     expose_headers=["*"],
+    max_age=86400,
 )
 
 # Create a router with the /api prefix
@@ -88,6 +90,11 @@ async def health_db():
     if ok:
         return {"db": "ok"}
     raise HTTPException(status_code=500, detail=f"DB error: {msg}")
+
+# Preflight handler for CORS OPTIONS requests
+@app.options("/{rest_of_path:path}")
+async def preflight(rest_of_path: str):
+    return JSONResponse(content={"ok": True})
 
 # Define Models
 class User(BaseModel):
@@ -384,17 +391,24 @@ def decode_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if not credentials:
+    if not credentials or not credentials.scheme or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     client_local = AsyncIOMotorClient(mongo_url)
     database = client_local[DB_NAME]
     try:
         payload = decode_token(credentials.credentials)
-        user = await database.users.find_one({"id": payload['user_id']})
+        user = await database.users.find_one({"id": payload["user_id"]})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return User(**user)
+    except HTTPException:
+        # Laisse passer les 401/403 proprement (CORS s'appliquera)
+        raise
+    except Exception as e:
+        logger.exception("get_current_user error: %s", e)
+        # Évite un 500 plateforme (souvent sans headers CORS)
+        raise HTTPException(status_code=401, detail="Auth check failed")
     finally:
         client_local.close()
 
