@@ -162,8 +162,11 @@ const EVALUATION_THEMES = [
   }
 ];
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+// API base: in production we go through a Vercel rewrite to avoid CORS ("/api"),
+// in local dev we use the explicit backend URL (from .env) or fallback to localhost:8000.
+const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const LOCAL_BACKEND = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+const API = isLocalhost ? `${LOCAL_BACKEND}/api` : '/api';
 
 // Auth Context
 const AuthContext = createContext();
