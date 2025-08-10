@@ -58,6 +58,21 @@ security = HTTPBearer(auto_error=False)
 # Create the main app without a prefix
 app = FastAPI()
 
+# --- CORS (vercel + local) ---
+from starlette.middleware.cors import CORSMiddleware
+
+ALLOWED_ORIGINS = [FRONTEND_URL, "http://localhost:3000"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "x-admin-reset"],
+    expose_headers=["*"],
+)
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -2145,14 +2160,6 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000",                       # frontend (local dev)
 ]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"https://basketball-manager-msoh-.*\.vercel\.app",  # preview URLs
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Configure logging
 logging.basicConfig(
