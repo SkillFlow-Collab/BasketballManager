@@ -41,20 +41,30 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://basketball-manager-msoh.v
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 DB_NAME = os.environ['DB_NAME']
-client = AsyncIOMotorClient(mongo_url)
-db = client[DB_NAME]
 
 # DB ping helper for health endpoint
 async def db_ping():
+    client_local = AsyncIOMotorClient(mongo_url)
     try:
-        await db.command("ping")
+        await client_local[DB_NAME].command("ping")
         return True, "ok"
     except Exception as e:
         logger.exception("DB ping failed: %s", e)
         return False, str(e)
+    finally:
+        client_local.close()
 
 # Security
 security = HTTPBearer(auto_error=False)
+
+# --- DB dependency (serverless-safe) ---
+# Un client Motor par requête pour éviter les erreurs d'event loop en serverless.
+async def get_database():
+    client_local = AsyncIOMotorClient(mongo_url)
+    try:
+        yield client_local[DB_NAME]
+    finally:
+        client_local.close()
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -536,7 +546,7 @@ async def dev_check_env(request: Request):
 @api_router.post("/auth/create-user", response_model=UserResponse)
 async def create_user(user_data: UserCreate, current_user: User = Depends(get_current_user)):
     # Check if user already exists
-    existing_user = await db.users.find_one({"email": user_data.email})
+    existing_user = await database.users.find_one({"email": user_data.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="User with this email already exists")
     
@@ -548,7 +558,7 @@ async def create_user(user_data: UserCreate, current_user: User = Depends(get_cu
     del user_dict['password']
     
     user_obj = User(**user_dict)
-    await db.users.insert_one(user_obj.dict())
+    await database.users.insert_one(user_obj.dict())
     
     return UserResponse(
         id=user_obj.id,
@@ -562,7 +572,7 @@ async def create_user(user_data: UserCreate, current_user: User = Depends(get_cu
 
 @api_router.get("/auth/users", response_model=List[UserResponse])
 async def get_users(current_user: User = Depends(get_current_user)):
-    users = await db.users.find().to_list(1000)
+    users = await database.users.find().to_list(1000)
     return [UserResponse(
         id=user['id'],
         email=user['email'],
@@ -578,7 +588,7 @@ async def delete_user(user_id: str, current_user: User = Depends(get_current_use
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     
-    result = await db.users.delete_one({"id": user_id})
+    result = await database.users.delete_one({"id": user_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -606,7 +616,7 @@ async def change_password(password_data: ChangePasswordRequest, current_user: Us
     new_password_hash = hash_password(password_data.new_password)
     
     # Update user password and remove must_change_password flag
-    await db.users.update_one(
+    await database.users.update_one(
         {"id": current_user.id},
         {"$set": {
             "password_hash": new_password_hash,
@@ -627,17 +637,17 @@ async def create_player(player_data: PlayerCreate, current_user: User = Depends(
     if isinstance(player_dict_for_db["date_of_birth"], date):
         player_dict_for_db["date_of_birth"] = player_dict_for_db["date_of_birth"].isoformat()
     
-    await db.players.insert_one(player_dict_for_db)
+    await database.players.insert_one(player_dict_for_db)
     return player_obj
 
 @api_router.get("/players", response_model=List[Player])
 async def get_players(current_user: User = Depends(get_current_user)):
-    players = await db.players.find().to_list(1000)
+    players = await database.players.find().to_list(1000)
     return [Player(**player) for player in players]
 
 @api_router.get("/players/{player_id}", response_model=Player)
 async def get_player(player_id: str, current_user: User = Depends(get_current_user)):
-    player = await db.players.find_one({"id": player_id})
+    player = await database.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     return Player(**player)
@@ -652,21 +662,21 @@ async def update_player(player_id: str, player_data: PlayerUpdate, current_user:
     if "date_of_birth" in update_data and isinstance(update_data["date_of_birth"], date):
         update_data["date_of_birth"] = update_data["date_of_birth"].isoformat()
     
-    result = await db.players.update_one({"id": player_id}, {"$set": update_data})
+    result = await database.players.update_one({"id": player_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    updated_player = await db.players.find_one({"id": player_id})
+    updated_player = await database.players.find_one({"id": player_id})
     return Player(**updated_player)
 
 @api_router.delete("/players/{player_id}")
 async def delete_player(player_id: str, current_user: User = Depends(get_current_user)):
-    result = await db.players.delete_one({"id": player_id})
+    result = await database.players.delete_one({"id": player_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Player not found")
     
     # Also delete all sessions for this player
-    await db.sessions.delete_many({"player_id": player_id})
+    await database.sessions.delete_many({"player_id": player_id})
     return {"message": "Player deleted successfully"}
 
 # Coach endpoints (with auth protection)
@@ -674,17 +684,17 @@ async def delete_player(player_id: str, current_user: User = Depends(get_current
 async def create_coach(coach_data: CoachCreate, current_user: User = Depends(get_current_user)):
     coach_dict = coach_data.dict()
     coach_obj = Coach(**coach_dict)
-    await db.coaches.insert_one(coach_obj.dict())
+    await database.coaches.insert_one(coach_obj.dict())
     return coach_obj
 
 @api_router.get("/coaches", response_model=List[Coach])
 async def get_coaches(current_user: User = Depends(get_current_user)):
-    coaches = await db.coaches.find().to_list(1000)
+    coaches = await database.coaches.find().to_list(1000)
     return [Coach(**coach) for coach in coaches]
 
 @api_router.get("/coaches/{coach_id}", response_model=Coach)
 async def get_coach(coach_id: str, current_user: User = Depends(get_current_user)):
-    coach = await db.coaches.find_one({"id": coach_id})
+    coach = await database.coaches.find_one({"id": coach_id})
     if not coach:
         raise HTTPException(status_code=404, detail="Coach not found")
     return Coach(**coach)
@@ -695,16 +705,16 @@ async def update_coach(coach_id: str, coach_data: CoachUpdate, current_user: Use
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
     
-    result = await db.coaches.update_one({"id": coach_id}, {"$set": update_data})
+    result = await database.coaches.update_one({"id": coach_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Coach not found")
     
-    updated_coach = await db.coaches.find_one({"id": coach_id})
+    updated_coach = await database.coaches.find_one({"id": coach_id})
     return Coach(**updated_coach)
 
 @api_router.delete("/coaches/{coach_id}")
 async def delete_coach(coach_id: str, current_user: User = Depends(get_current_user)):
-    result = await db.coaches.delete_one({"id": coach_id})
+    result = await database.coaches.delete_one({"id": coach_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Coach not found")
     return {"message": "Coach deleted successfully"}
@@ -713,7 +723,7 @@ async def delete_coach(coach_id: str, current_user: User = Depends(get_current_u
 @api_router.post("/evaluations", response_model=PlayerEvaluation)
 async def create_evaluation(evaluation_data: EvaluationCreate, current_user: User = Depends(get_current_user)):
     # Verify player exists
-    player = await db.players.find_one({"id": evaluation_data.player_id})
+    player = await database.players.find_one({"id": evaluation_data.player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
@@ -740,7 +750,7 @@ async def create_evaluation(evaluation_data: EvaluationCreate, current_user: Use
     evaluation_type = evaluation_data.evaluation_type or "initial"
     
     # Check if an evaluation of this type already exists for this player
-    existing_evaluation = await db.evaluations.find_one({
+    existing_evaluation = await database.evaluations.find_one({
         "player_id": evaluation_data.player_id,
         "evaluation_type": evaluation_type
     })
@@ -756,13 +766,13 @@ async def create_evaluation(evaluation_data: EvaluationCreate, current_user: Use
             "notes": evaluation_data.notes
         }
         
-        await db.evaluations.update_one(
+        await database.evaluations.update_one(
             {"id": existing_evaluation["id"]},
             {"$set": updated_evaluation}
         )
         
         # Return the updated evaluation
-        updated_eval = await db.evaluations.find_one({"id": existing_evaluation["id"]})
+        updated_eval = await database.evaluations.find_one({"id": existing_evaluation["id"]})
         return PlayerEvaluation(**updated_eval)
     else:
         # Create new evaluation
@@ -776,19 +786,19 @@ async def create_evaluation(evaluation_data: EvaluationCreate, current_user: Use
             notes=evaluation_data.notes
         )
         
-        await db.evaluations.insert_one(evaluation_obj.dict())
+        await database.evaluations.insert_one(evaluation_obj.dict())
         return evaluation_obj
 
 @api_router.get("/evaluations/player/{player_id}", response_model=List[PlayerEvaluation])
 async def get_player_evaluations(player_id: str, current_user: User = Depends(get_current_user)):
-    evaluations = await db.evaluations.find({"player_id": player_id}).sort("evaluation_date", -1).to_list(100)
+    evaluations = await database.evaluations.find({"player_id": player_id}).sort("evaluation_date", -1).to_list(100)
     return [PlayerEvaluation(**evaluation) for evaluation in evaluations]
 
 @app.get("/api/evaluations/averages/all")
 async def get_all_players_averages(current_user: User = Depends(get_current_user)):
     """Get evaluation averages for all players"""
     try:
-        evaluations = await db.evaluations.find({}).to_list(1000)
+        evaluations = await database.evaluations.find({}).to_list(1000)
         
         if not evaluations:
             return {"theme_averages": {}, "overall_average": 0, "total_evaluations": 0}
@@ -836,14 +846,14 @@ async def get_position_averages(position: str, current_user: User = Depends(get_
     """Get evaluation averages for players of a specific position"""
     try:
         # Get players of the specified position
-        players = await db.players.find({"position": position}).to_list(100)
+        players = await database.players.find({"position": position}).to_list(100)
         player_ids = [player["id"] for player in players]
         
         if not player_ids:
             return {"theme_averages": {}, "overall_average": 0, "players_count": 0, "total_evaluations": 0}
         
         # Get evaluations for these players
-        evaluations = await db.evaluations.find({"player_id": {"$in": player_ids}}).to_list(1000)
+        evaluations = await database.evaluations.find({"player_id": {"$in": player_ids}}).to_list(1000)
         
         if not evaluations:
             return {"theme_averages": {}, "overall_average": 0, "players_count": len(player_ids), "total_evaluations": 0}
@@ -890,7 +900,7 @@ async def get_position_averages(position: str, current_user: User = Depends(get_
 
 @api_router.get("/evaluations/player/{player_id}/latest", response_model=PlayerEvaluation)
 async def get_latest_player_evaluation(player_id: str, current_user: User = Depends(get_current_user)):
-    evaluation = await db.evaluations.find_one(
+    evaluation = await database.evaluations.find_one(
         {"player_id": player_id}, 
         sort=[("evaluation_date", -1)]
     )
@@ -900,7 +910,7 @@ async def get_latest_player_evaluation(player_id: str, current_user: User = Depe
 
 @api_router.get("/evaluations/player/{player_id}/average")
 async def get_player_evaluation_average(player_id: str, current_user: User = Depends(get_current_user)):
-    evaluations = await db.evaluations.find({"player_id": player_id}).to_list(100)
+    evaluations = await database.evaluations.find({"player_id": player_id}).to_list(100)
     
     if not evaluations:
         raise HTTPException(status_code=404, detail="No evaluations found for this player")
@@ -942,7 +952,7 @@ async def get_player_evaluation_average(player_id: str, current_user: User = Dep
 @api_router.get("/evaluations/averages/all")
 async def get_all_players_averages(current_user: User = Depends(get_current_user)):
     """Get average scores across all players"""
-    evaluations = await db.evaluations.find().to_list(1000)
+    evaluations = await database.evaluations.find().to_list(1000)
     
     if not evaluations:
         return {"theme_averages": {}, "overall_average": 0, "total_evaluations": 0}
@@ -978,14 +988,14 @@ async def get_all_players_averages(current_user: User = Depends(get_current_user
 async def get_position_averages(position: str, current_user: User = Depends(get_current_user)):
     """Get average scores for players of a specific position"""
     # Get all players of this position
-    players = await db.players.find({"position": position}).to_list(1000)
+    players = await database.players.find({"position": position}).to_list(1000)
     player_ids = [player["id"] for player in players]
     
     if not player_ids:
         return {"theme_averages": {}, "overall_average": 0, "total_evaluations": 0}
     
     # Get evaluations for these players
-    evaluations = await db.evaluations.find({"player_id": {"$in": player_ids}}).to_list(1000)
+    evaluations = await database.evaluations.find({"player_id": {"$in": player_ids}}).to_list(1000)
     
     if not evaluations:
         return {"theme_averages": {}, "overall_average": 0, "total_evaluations": 0}
@@ -1023,7 +1033,7 @@ async def get_position_averages(position: str, current_user: User = Depends(get_
 async def delete_evaluation(evaluation_id: str, current_user: User = Depends(get_current_user)):
     """Delete a specific evaluation"""
     try:
-        result = await db.evaluations.delete_one({"id": evaluation_id})
+        result = await database.evaluations.delete_one({"id": evaluation_id})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Evaluation not found")
         return {"message": "Evaluation deleted successfully"}
@@ -1034,7 +1044,7 @@ async def delete_evaluation(evaluation_id: str, current_user: User = Depends(get
 async def get_all_evaluations(current_user: User = Depends(get_current_user)):
     """Get all evaluations (for admin purposes)"""
     try:
-        evaluations = await db.evaluations.find({}).to_list(1000)
+        evaluations = await database.evaluations.find({}).to_list(1000)
         return evaluations
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching evaluations: {str(e)}")
@@ -1049,7 +1059,7 @@ async def create_collective_session(session_data: CollectiveSessionCreate, curre
     if isinstance(session_dict_for_db["session_date"], date):
         session_dict_for_db["session_date"] = session_dict_for_db["session_date"].isoformat()
     
-    await db.collective_sessions.insert_one(session_dict_for_db)
+    await database.collective_sessions.insert_one(session_dict_for_db)
     return session_obj
 
 @api_router.get("/collective-sessions", response_model=List[CollectiveSession])
@@ -1076,12 +1086,12 @@ async def get_collective_sessions(
     if session_type:
         query["session_type"] = session_type
     
-    sessions = await db.collective_sessions.find(query).sort("session_date", -1).to_list(100)
+    sessions = await database.collective_sessions.find(query).sort("session_date", -1).to_list(100)
     return [CollectiveSession(**session) for session in sessions]
 
 @api_router.get("/collective-sessions/{session_id}", response_model=CollectiveSession)
 async def get_collective_session(session_id: str, current_user: User = Depends(get_current_user)):
-    session = await db.collective_sessions.find_one({"id": session_id})
+    session = await database.collective_sessions.find_one({"id": session_id})
     if not session:
         raise HTTPException(status_code=404, detail="Collective session not found")
     return CollectiveSession(**session)
@@ -1093,22 +1103,22 @@ async def update_collective_session(session_id: str, session_data: CollectiveSes
     if "session_date" in update_data and isinstance(update_data["session_date"], date):
         update_data["session_date"] = update_data["session_date"].isoformat()
     
-    result = await db.collective_sessions.update_one(
+    result = await database.collective_sessions.update_one(
         {"id": session_id}, 
         {"$set": update_data}
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Collective session not found")
     
-    updated_session = await db.collective_sessions.find_one({"id": session_id})
+    updated_session = await database.collective_sessions.find_one({"id": session_id})
     return CollectiveSession(**updated_session)
 
 @api_router.delete("/collective-sessions/{session_id}")
 async def delete_collective_session(session_id: str, current_user: User = Depends(get_current_user)):
     # Also delete all attendances for this session
-    await db.attendances.delete_many({"collective_session_id": session_id})
+    await database.attendances.delete_many({"collective_session_id": session_id})
     
-    result = await db.collective_sessions.delete_one({"id": session_id})
+    result = await database.collective_sessions.delete_one({"id": session_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Collective session not found")
     return {"message": "Collective session deleted successfully"}
@@ -1122,7 +1132,7 @@ async def create_match(match_data: MatchCreate, current_user: User = Depends(get
     match_dict_for_db = match_obj.dict()
     match_dict_for_db['match_date'] = match_obj.match_date.isoformat()
     
-    await db.matches.insert_one(match_dict_for_db)
+    await database.matches.insert_one(match_dict_for_db)
     return match_obj
 
 @api_router.get("/matches", response_model=List[Match])
@@ -1151,12 +1161,12 @@ async def get_matches(
     if team:
         query["team"] = team
     
-    matches = await db.matches.find(query).sort("match_date", -1).to_list(100)
+    matches = await database.matches.find(query).sort("match_date", -1).to_list(100)
     return [Match(**match) for match in matches]
 
 @api_router.get("/matches/{match_id}", response_model=Match)
 async def get_match(match_id: str, current_user: User = Depends(get_current_user)):
-    match = await db.matches.find_one({"id": match_id})
+    match = await database.matches.find_one({"id": match_id})
     if not match:
         raise HTTPException(status_code=404, detail="Match not found")
     return Match(**match)
@@ -1173,7 +1183,7 @@ async def update_match(match_id: str, match_data: MatchUpdate, current_user: Use
     if 'match_date' in update_data:
         update_data['match_date'] = update_data['match_date'].isoformat()
     
-    result = await db.matches.update_one(
+    result = await database.matches.update_one(
         {"id": match_id},
         {"$set": update_data}
     )
@@ -1182,15 +1192,15 @@ async def update_match(match_id: str, match_data: MatchUpdate, current_user: Use
         raise HTTPException(status_code=404, detail="Match not found")
     
     # Return updated match
-    updated_match = await db.matches.find_one({"id": match_id})
+    updated_match = await database.matches.find_one({"id": match_id})
     return Match(**updated_match)
 
 @api_router.delete("/matches/{match_id}")
 async def delete_match(match_id: str, current_user: User = Depends(get_current_user)):
     # Also delete all participations for this match
-    await db.match_participations.delete_many({"match_id": match_id})
+    await database.match_participations.delete_many({"match_id": match_id})
     
-    result = await db.matches.delete_one({"id": match_id})
+    result = await database.matches.delete_one({"id": match_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Match not found")
     return {"message": "Match deleted successfully"}
@@ -1199,7 +1209,7 @@ async def delete_match(match_id: str, current_user: User = Depends(get_current_u
 @api_router.post("/match-participations", response_model=MatchParticipation)
 async def create_match_participation(participation_data: MatchParticipationCreate, current_user: User = Depends(get_current_user)):
     # Check if participation already exists for this player and match
-    existing_participation = await db.match_participations.find_one({
+    existing_participation = await database.match_participations.find_one({
         "match_id": participation_data.match_id,
         "player_id": participation_data.player_id
     })
@@ -1207,28 +1217,28 @@ async def create_match_participation(participation_data: MatchParticipationCreat
     if existing_participation:
         # Update existing participation
         update_data = participation_data.dict()
-        await db.match_participations.update_one(
+        await database.match_participations.update_one(
             {"id": existing_participation["id"]},
             {"$set": update_data}
         )
-        updated_participation = await db.match_participations.find_one({"id": existing_participation["id"]})
+        updated_participation = await database.match_participations.find_one({"id": existing_participation["id"]})
         return MatchParticipation(**updated_participation)
     else:
         # Create new participation
         participation_obj = MatchParticipation(**participation_data.dict())
         participation_dict_for_db = participation_obj.dict()
-        await db.match_participations.insert_one(participation_dict_for_db)
+        await database.match_participations.insert_one(participation_dict_for_db)
         return participation_obj
 
 @api_router.get("/match-participations/match/{match_id}", response_model=List[dict])
 async def get_match_participations(match_id: str, current_user: User = Depends(get_current_user)):
     # Get all participations for the match
-    participations = await db.match_participations.find({"match_id": match_id}).to_list(100)
+    participations = await database.match_participations.find({"match_id": match_id}).to_list(100)
     
     # Enrich with player data
     result = []
     for participation in participations:
-        player = await db.players.find_one({"id": participation["player_id"]})
+        player = await database.players.find_one({"id": participation["player_id"]})
         if player:
             result.append({
                 "participation": MatchParticipation(**participation),
@@ -1240,12 +1250,12 @@ async def get_match_participations(match_id: str, current_user: User = Depends(g
 @api_router.get("/match-participations/player/{player_id}", response_model=List[dict])
 async def get_player_match_participations(player_id: str, current_user: User = Depends(get_current_user)):
     # Get all participations for the player
-    participations = await db.match_participations.find({"player_id": player_id}).to_list(100)
+    participations = await database.match_participations.find({"player_id": player_id}).to_list(100)
     
     # Enrich with match data
     result = []
     for participation in participations:
-        match = await db.matches.find_one({"id": participation["match_id"]})
+        match = await database.matches.find_one({"id": participation["match_id"]})
         if match:
             result.append({
                 "participation": MatchParticipation(**participation),
@@ -1262,7 +1272,7 @@ async def update_match_participation(participation_id: str, participation_data: 
     if not update_data:
         raise HTTPException(status_code=400, detail="No data provided for update")
     
-    result = await db.match_participations.update_one(
+    result = await database.match_participations.update_one(
         {"id": participation_id},
         {"$set": update_data}
     )
@@ -1271,12 +1281,12 @@ async def update_match_participation(participation_id: str, participation_data: 
         raise HTTPException(status_code=404, detail="Match participation not found")
     
     # Return updated participation
-    updated_participation = await db.match_participations.find_one({"id": participation_id})
+    updated_participation = await database.match_participations.find_one({"id": participation_id})
     return MatchParticipation(**updated_participation)
 
 @api_router.delete("/match-participations/{participation_id}")
 async def delete_match_participation(participation_id: str, current_user: User = Depends(get_current_user)):
-    result = await db.match_participations.delete_one({"id": participation_id})
+    result = await database.match_participations.delete_one({"id": participation_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Match participation not found")
     return {"message": "Match participation deleted successfully"}
@@ -1285,33 +1295,33 @@ async def delete_match_participation(participation_id: str, current_user: User =
 @api_router.post("/attendances", response_model=Attendance)
 async def create_attendance(attendance_data: AttendanceCreate, current_user: User = Depends(get_current_user)):
     # Check if attendance already exists for this player and session
-    existing_attendance = await db.attendances.find_one({
+    existing_attendance = await database.attendances.find_one({
         "collective_session_id": attendance_data.collective_session_id,
         "player_id": attendance_data.player_id
     })
     
     if existing_attendance:
         # Update existing attendance
-        result = await db.attendances.update_one(
+        result = await database.attendances.update_one(
             {"id": existing_attendance["id"]},
             {"$set": attendance_data.dict()}
         )
-        updated_attendance = await db.attendances.find_one({"id": existing_attendance["id"]})
+        updated_attendance = await database.attendances.find_one({"id": existing_attendance["id"]})
         return Attendance(**updated_attendance)
     else:
         # Create new attendance
         attendance_obj = Attendance(**attendance_data.dict())
-        await db.attendances.insert_one(attendance_obj.dict())
+        await database.attendances.insert_one(attendance_obj.dict())
         return attendance_obj
 
 @api_router.get("/attendances/session/{session_id}")
 async def get_session_attendances(session_id: str, current_user: User = Depends(get_current_user)):
-    attendances = await db.attendances.find({"collective_session_id": session_id}).to_list(100)
+    attendances = await database.attendances.find({"collective_session_id": session_id}).to_list(100)
     
     # Get player info for each attendance
     result = []
     for attendance in attendances:
-        player = await db.players.find_one({"id": attendance["player_id"]})
+        player = await database.players.find_one({"id": attendance["player_id"]})
         if player:
             attendance_with_player = {
                 **attendance,
@@ -1329,12 +1339,12 @@ async def get_player_attendances(
     current_user: User = Depends(get_current_user)
 ):
     # Get all attendances for the player
-    attendances = await db.attendances.find({"player_id": player_id}).to_list(1000)
+    attendances = await database.attendances.find({"player_id": player_id}).to_list(1000)
     
     # Get session info for each attendance
     result = []
     for attendance in attendances:
-        session = await db.collective_sessions.find_one({"id": attendance["collective_session_id"]})
+        session = await database.collective_sessions.find_one({"id": attendance["collective_session_id"]})
         if session:
             # Apply date filter if provided
             if start_date and end_date:
@@ -1363,17 +1373,17 @@ async def get_player_attendance_report(
     current_user: User = Depends(get_current_user)
 ):
     # Get player info
-    player = await db.players.find_one({"id": player_id})
+    player = await database.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
     # Get all attendances for the player
-    attendances = await db.attendances.find({"player_id": player_id}).to_list(1000)
+    attendances = await database.attendances.find({"player_id": player_id}).to_list(1000)
     
     # Get session info and apply filters
     attendance_data = []
     for attendance in attendances:
-        session = await db.collective_sessions.find_one({"id": attendance["collective_session_id"]})
+        session = await database.collective_sessions.find_one({"id": attendance["collective_session_id"]})
         if session:
             # Convert session_date to datetime for comparison
             if isinstance(session["session_date"], str):
@@ -1465,7 +1475,7 @@ async def get_player_attendance_report(
 async def create_session(session_data: SessionCreate, current_user: User = Depends(get_current_user)):
     # Verify all players exist
     for player_id in session_data.player_ids:
-        player = await db.players.find_one({"id": player_id})
+        player = await database.players.find_one({"id": player_id})
         if not player:
             raise HTTPException(status_code=404, detail=f"Player with id {player_id} not found")
     
@@ -1477,12 +1487,12 @@ async def create_session(session_data: SessionCreate, current_user: User = Depen
     if isinstance(session_dict_for_db["session_date"], date):
         session_dict_for_db["session_date"] = session_dict_for_db["session_date"].isoformat()
     
-    await db.sessions.insert_one(session_dict_for_db)
+    await database.sessions.insert_one(session_dict_for_db)
     return session_obj
 
 @api_router.get("/sessions", response_model=List[Session])
 async def get_sessions(current_user: User = Depends(get_current_user)):
-    sessions = await db.sessions.find().sort("session_date", -1).to_list(1000)
+    sessions = await database.sessions.find().sort("session_date", -1).to_list(1000)
     result = []
     for session in sessions:
         # Handle both old and new format
@@ -1504,7 +1514,7 @@ async def get_sessions(current_user: User = Depends(get_current_user)):
 @api_router.get("/sessions/player/{player_id}", response_model=List[Session])
 async def get_player_sessions(player_id: str, current_user: User = Depends(get_current_user)):
     # Find sessions where the player is in player_ids array OR in old player_id field
-    sessions = await db.sessions.find({
+    sessions = await database.sessions.find({
         "$or": [
             {"player_ids": {"$in": [player_id]}},
             {"player_id": player_id}  # For backward compatibility
@@ -1530,7 +1540,7 @@ async def get_player_sessions(player_id: str, current_user: User = Depends(get_c
 
 @api_router.get("/sessions/{session_id}", response_model=Session)
 async def get_session(session_id: str, current_user: User = Depends(get_current_user)):
-    session = await db.sessions.find_one({"id": session_id})
+    session = await database.sessions.find_one({"id": session_id})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -1553,16 +1563,16 @@ async def update_session(session_id: str, session_data: SessionUpdate, current_u
     if "session_date" in update_data and isinstance(update_data["session_date"], date):
         update_data["session_date"] = update_data["session_date"].isoformat()
     
-    result = await db.sessions.update_one({"id": session_id}, {"$set": update_data})
+    result = await database.sessions.update_one({"id": session_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    updated_session = await db.sessions.find_one({"id": session_id})
+    updated_session = await database.sessions.find_one({"id": session_id})
     return Session(**updated_session)
 
 @api_router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str, current_user: User = Depends(get_current_user)):
-    result = await db.sessions.delete_one({"id": session_id})
+    result = await database.sessions.delete_one({"id": session_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"message": "Session deleted successfully"}
@@ -1570,7 +1580,7 @@ async def delete_session(session_id: str, current_user: User = Depends(get_curre
 @api_router.get("/reports/player/{player_id}", response_model=PlayerReport)
 async def get_player_report(player_id: str, current_user: User = Depends(get_current_user), start_date: Optional[str] = None, end_date: Optional[str] = None):
     # Get player
-    player = await db.players.find_one({"id": player_id})
+    player = await database.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
@@ -1590,7 +1600,7 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
         }
     
     # Get sessions for this player (filtered by date if provided)
-    sessions = await db.sessions.find(base_query).to_list(1000)
+    sessions = await database.sessions.find(base_query).to_list(1000)
     
     session_objects = []
     
@@ -1640,7 +1650,7 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
     recent_sessions = sorted(session_objects, key=lambda x: x.session_date, reverse=True)[:10]
     
     # Get match statistics for this player
-    match_participations = await db.match_participations.find({"player_id": player_id}).to_list(1000)
+    match_participations = await database.match_participations.find({"player_id": player_id}).to_list(1000)
     match_stats = {
         "total_matches": len(match_participations),
         "matches_played": len([p for p in match_participations if p["is_present"]]),
@@ -1663,7 +1673,7 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
     
     # Get match details for team breakdown and separate U18/U21 averages
     for participation in match_participations:
-        match = await db.matches.find_one({"id": participation["match_id"]})
+        match = await database.matches.find_one({"id": participation["match_id"]})
         if match:
             # Team breakdown
             team = match["team"]
@@ -1719,7 +1729,7 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
 @api_router.get("/reports/coach/{coach_name}", response_model=CoachReport)
 async def get_coach_report(coach_name: str, current_user: User = Depends(get_current_user), start_date: Optional[str] = None, end_date: Optional[str] = None):
     # Get coach by name (since coaches are referenced by name in sessions)
-    coach = await db.coaches.find_one({
+    coach = await database.coaches.find_one({
         "$or": [
             {"first_name": coach_name},
             {"last_name": coach_name},
@@ -1746,7 +1756,7 @@ async def get_coach_report(coach_name: str, current_user: User = Depends(get_cur
         }
     
     # Get sessions for this coach (filtered by date if provided)
-    sessions = await db.sessions.find(query).to_list(1000)
+    sessions = await database.sessions.find(query).to_list(1000)
     session_objects = []
     
     for session in sessions:
@@ -1785,7 +1795,7 @@ async def get_coach_report(coach_name: str, current_user: User = Depends(get_cur
     
     # Player breakdown
     player_breakdown = {}
-    players = await db.players.find().to_list(1000)
+    players = await database.players.find().to_list(1000)
     player_lookup = {player["id"]: f"{player['first_name']} {player['last_name']}" for player in players}
     
     for session_obj in session_objects:
@@ -1807,8 +1817,8 @@ async def get_coach_report(coach_name: str, current_user: User = Depends(get_cur
 
 @api_router.get("/calendar")
 async def get_calendar_data(current_user: User = Depends(get_current_user)):
-    sessions = await db.sessions.find().to_list(1000)
-    players = await db.players.find().to_list(1000)
+    sessions = await database.sessions.find().to_list(1000)
+    players = await database.players.find().to_list(1000)
     
     # Create player lookup
     player_lookup = {player["id"]: f"{player['first_name']} {player['last_name']}" for player in players}
@@ -1858,8 +1868,8 @@ async def get_calendar_data(current_user: User = Depends(get_current_user)):
 @api_router.get("/analytics/dashboard")
 async def get_dashboard_analytics(current_user: User = Depends(get_current_user), days: int = 30):
     # Get all sessions and players
-    all_sessions = await db.sessions.find().to_list(1000)
-    players = await db.players.find().to_list(1000)
+    all_sessions = await database.sessions.find().to_list(1000)
+    players = await database.players.find().to_list(1000)
     
     # Create player lookup
     player_lookup = {player["id"]: f"{player['first_name']} {player['last_name']}" for player in players}
@@ -2036,7 +2046,7 @@ async def get_heatmap_data(current_user: User = Depends(get_current_user), days:
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
     
-    sessions = await db.sessions.find().to_list(1000)
+    sessions = await database.sessions.find().to_list(1000)
     
     # Convert sessions to consistent format and filter by date
     processed_sessions = []
@@ -2099,7 +2109,7 @@ app.include_router(api_router)
 async def initialize_data():
     logger.info("Startup: ENV=%s DB_NAME=%s", ENVIRONMENT, os.environ.get('DB_NAME'))
     # Check if admin user exists
-    admin_user = await db.users.find_one({"role": "admin"})
+    admin_user = await database.users.find_one({"role": "admin"})
     if not admin_user:
         # Create default admin user
         admin_password_hash = hash_password("admin123")  # Change this password!
@@ -2114,11 +2124,11 @@ async def initialize_data():
             "created_at": datetime.utcnow(),
             "last_login": None
         }
-        await db.users.insert_one(admin_user_data)
+        await database.users.insert_one(admin_user_data)
         logger.info("Admin user created: admin@staderochelais.com / admin123")
     
     # Check if coaches already exist
-    existing_coaches = await db.coaches.count_documents({})
+    existing_coaches = await database.coaches.count_documents({})
     if existing_coaches == 0:
         # Create default coaches
         default_coaches = [
@@ -2159,12 +2169,12 @@ async def initialize_data():
             }
         ]
         
-        await db.coaches.insert_many(default_coaches)
+        await database.coaches.insert_many(default_coaches)
         logger.info("Coaches initialisés avec succès")
     
     # Update theme names in existing sessions
     try:
-        await db.sessions.update_many(
+        await database.sessions.update_many(
             {"themes": {"$in": ["Écran et remise"]}},
             {"$set": {"themes.$": "Écran et lecture"}}
         )
