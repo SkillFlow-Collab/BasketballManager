@@ -40,11 +40,11 @@ ADMIN_RESET_TOKEN = os.environ.get('ADMIN_RESET_TOKEN')  # à définir dans Verc
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://basketball-manager-msoh.vercel.app')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-DB_NAME = os.environ['DB_NAME']
+mongo_url = os.environ.get('MONGO_URL')
+DB_NAME = os.environ.get('DB_NAME', 'basketball')
 
-mongo_client: AsyncIOMotorClient = None
-db = None
+mongo_client: AsyncIOMotorClient = AsyncIOMotorClient(mongo_url) if mongo_url else None
+db = mongo_client[DB_NAME] if mongo_client and DB_NAME else None
 
 # DB ping helper for health endpoint
 async def db_ping():
@@ -68,8 +68,12 @@ app = FastAPI()
 @app.on_event("startup")
 async def startup_event():
     global mongo_client, db
-    mongo_client = AsyncIOMotorClient(mongo_url)
-    db = mongo_client[DB_NAME]
+    if mongo_url and DB_NAME:
+        mongo_client = AsyncIOMotorClient(mongo_url)
+        db = mongo_client[DB_NAME]
+        logger.info(f"[DB INIT] Connected to database '{DB_NAME}'")
+    else:
+        logger.error("MONGO_URL or DB_NAME not set properly")
 
 @app.on_event("shutdown")
 async def shutdown_event():
