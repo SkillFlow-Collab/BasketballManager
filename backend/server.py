@@ -4,7 +4,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import asyncio
 import os
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -40,58 +39,50 @@ ADMIN_RESET_TOKEN = os.environ.get('ADMIN_RESET_TOKEN')  # à définir dans Verc
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://basketball-manager-msoh.vercel.app')
 
 # MongoDB connection
-mongo_url = os.environ.get('MONGO_URL')
-DB_NAME = os.environ.get('DB_NAME', 'basketball')
-
-mongo_client: AsyncIOMotorClient = AsyncIOMotorClient(mongo_url) if mongo_url else None
-db = mongo_client[DB_NAME] if mongo_client and DB_NAME else None
+mongo_url = os.environ['MONGO_URL']
+DB_NAME = os.environ['DB_NAME']
 
 # DB ping helper for health endpoint
 async def db_ping():
+    client_local = AsyncIOMotorClient(mongo_url)
     try:
-        await db.command("ping")
+        await client_local[DB_NAME].command("ping")
         return True, "ok"
     except Exception as e:
         logger.exception("DB ping failed: %s", e)
         return False, str(e)
+    finally:
+        client_local.close()
 
 # Security
 security = HTTPBearer(auto_error=False)
 
+# --- DB dependency (serverless-safe) ---
+# Un client Motor par requête pour éviter les erreurs d'event loop en serverless.
+async def get_database():
+    client_local = AsyncIOMotorClient(mongo_url)
+    try:
+        yield client_local[DB_NAME]
+    finally:
+        client_local.close()
 
+# Create the main app without a prefix
 app = FastAPI()
-
-# --- FastAPI startup/shutdown events for MongoDB connection ---
-@app.on_event("startup")
-async def startup_event():
-    global mongo_client, db
-    if mongo_url and DB_NAME:
-        mongo_client = AsyncIOMotorClient(mongo_url)
-        db = mongo_client[DB_NAME]
-        logger.info(f"[DB INIT] Connected to database '{DB_NAME}'")
-    else:
-        logger.error("MONGO_URL or DB_NAME not set properly")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    global mongo_client
-    if mongo_client:
-        mongo_client.close()
 
 # --- CORS (vercel + local) ---
 from starlette.middleware.cors import CORSMiddleware
 
+ALLOWED_ORIGINS = [FRONTEND_URL, "http://localhost:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://basketball-manager-msoh.vercel.app",
-        "https://basketball-manager-kappa.vercel.app",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,
 )
 
 # Create a router with the /api prefix
@@ -410,30 +401,26 @@ def decode_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    global db
     if not credentials or not credentials.scheme or not credentials.credentials:
-        logger.warning("Auth failed: No credentials provided")
         raise HTTPException(status_code=401, detail="Not authenticated")
+
+    client_local = AsyncIOMotorClient(mongo_url)
+    database = client_local[DB_NAME]
     try:
         payload = decode_token(credentials.credentials)
-        user = await db.users.find_one({"id": payload["user_id"]})
-        # Fallback lookup by email if user not found by id and email is present in payload
-        if not user and "email" in payload:
-            user = await db.users.find_one({"email": payload["email"]})
+        user = await database.users.find_one({"id": payload["user_id"]})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return User(**user)
-    except jwt.ExpiredSignatureError:
-        logger.warning("Auth failed: Token expired")
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        logger.warning("Auth failed: Invalid token")
-        raise HTTPException(status_code=401, detail="Invalid token")
     except HTTPException:
+        # Laisse passer les 401/403 proprement (CORS s'appliquera)
         raise
     except Exception as e:
-        logger.exception("Auth check failed: %s", e)
+        logger.exception("get_current_user error: %s", e)
+        # Évite un 500 plateforme (souvent sans headers CORS)
         raise HTTPException(status_code=401, detail="Auth check failed")
+    finally:
+        client_local.close()
 
 async def get_admin_user(current_user: User = Depends(get_current_user)):
     if current_user.role != 'admin':
@@ -443,24 +430,16 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 # Authentication endpoints
 @api_router.post("/auth/login", response_model=LoginResponse)
 async def login(login_data: UserLogin):
-    global db
+    client_local = AsyncIOMotorClient(mongo_url)
+    database = client_local[DB_NAME]
     try:
-        user = await db.users.find_one({"email": login_data.email})
-        if not user:
-            logger.error(f"Login failed: no user found for email={login_data.email}")
+        user = await database.users.find_one({"email": login_data.email})
+        if not user or not verify_password(login_data.password, user['password_hash']):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        if "password_hash" not in user:
-            logger.error(f"User {login_data.email} missing password_hash field")
-            raise HTTPException(status_code=500, detail="Corrupt user document")
-
-        if not verify_password(login_data.password, user["password_hash"]):
-            logger.error(f"Invalid password for {login_data.email}")
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-
-        # update last_login
-        await db.users.update_one(
-            {"id": user["id"]},
+        # Update last login
+        await database.users.update_one(
+            {"id": user['id']},
             {"$set": {"last_login": datetime.utcnow()}}
         )
 
@@ -475,12 +454,14 @@ async def login(login_data: UserLogin):
             last_login=user.get('last_login')
         )
         return LoginResponse(token=token, user=user_response)
-
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Login failed for {login_data.email}: {e}")
-        raise HTTPException(status_code=500, detail="Login failed")
+        logger.exception("Login failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+    finally:
+        client_local.close()
+
 class ResetAdminBody(BaseModel):
     email: Optional[str] = "admin@staderochelais.com"
     password: Optional[str] = "admin123"
@@ -489,13 +470,14 @@ class ResetAdminBody(BaseModel):
 
 @api_router.get("/dev/admin-status")
 async def admin_status(request: Request):
-    global db
+    client_local = AsyncIOMotorClient(mongo_url)
+    database = client_local[DB_NAME]
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
-        total = await db.users.count_documents({})
-        admin_doc = await db.users.find_one({"role": "admin"})
-        default_email_doc = await db.users.find_one({"email": "admin@staderochelais.com"})
+        total = await database.users.count_documents({})
+        admin_doc = await database.users.find_one({"role": "admin"})
+        default_email_doc = await database.users.find_one({"email": "admin@staderochelais.com"})
         return {
             "total_users": total,
             "has_admin": bool(admin_doc),
@@ -506,17 +488,20 @@ async def admin_status(request: Request):
     except Exception as e:
         logger.exception("admin-status error: %s", e)
         raise HTTPException(status_code=500, detail=f"Admin status error: {str(e)}")
+    finally:
+        client_local.close()
 
 @api_router.post("/dev/reset-admin")
 async def dev_reset_admin(body: ResetAdminBody, request: Request):
-    global db
+    client_local = AsyncIOMotorClient(mongo_url)
+    database = client_local[DB_NAME]
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
 
         pwd_hash = hash_password(body.password)
         now = datetime.utcnow()
-        existing = await db.users.find_one({"email": body.email})
+        existing = await database.users.find_one({"email": body.email})
         data = {
             "email": body.email,
             "password_hash": pwd_hash,
@@ -527,12 +512,12 @@ async def dev_reset_admin(body: ResetAdminBody, request: Request):
             "last_login": None,
         }
         if existing:
-            await db.users.update_one({"email": body.email}, {"$set": data})
+            await database.users.update_one({"email": body.email}, {"$set": data})
             user_id = existing.get("id")
             action = "updated"
         else:
             new_user = {"id": str(uuid.uuid4()), **data, "created_at": now}
-            await db.users.insert_one(new_user)
+            await database.users.insert_one(new_user)
             user_id = new_user["id"]
             action = "created"
 
@@ -543,6 +528,8 @@ async def dev_reset_admin(body: ResetAdminBody, request: Request):
     except Exception as e:
         logger.exception("reset-admin error: %s", e)
         raise HTTPException(status_code=500, detail=f"Reset admin error: {str(e)}")
+    finally:
+        client_local.close()
 
 # Environment sanity-check endpoint
 @api_router.get("/dev/check-env")
@@ -557,10 +544,9 @@ async def dev_check_env(request: Request):
     }
 
 @api_router.post("/auth/create-user", response_model=UserResponse)
-async def create_user(user_data: UserCreate, current_user: User = Depends(get_current_user)):
-    global db
+async def create_user(user_data: UserCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     # Check if user already exists
-    existing_user = await db.users.find_one({"email": user_data.email})
+    existing_user = await database.users.find_one({"email": user_data.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="User with this email already exists")
     
@@ -572,7 +558,7 @@ async def create_user(user_data: UserCreate, current_user: User = Depends(get_cu
     del user_dict['password']
     
     user_obj = User(**user_dict)
-    await db.users.insert_one(user_obj.dict())
+    await database.users.insert_one(user_obj.dict())
     
     return UserResponse(
         id=user_obj.id,
@@ -585,9 +571,8 @@ async def create_user(user_data: UserCreate, current_user: User = Depends(get_cu
     )
 
 @api_router.get("/auth/users", response_model=List[UserResponse])
-async def get_users(current_user: User = Depends(get_current_user)):
-    global db
-    users = await db.users.find().to_list(1000)
+async def get_users(current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    users = await database.users.find().to_list(1000)
     return [UserResponse(
         id=user['id'],
         email=user['email'],
@@ -599,12 +584,11 @@ async def get_users(current_user: User = Depends(get_current_user)):
     ) for user in users]
 
 @api_router.delete("/auth/users/{user_id}")
-async def delete_user(user_id: str, current_user: User = Depends(get_current_user)):
-    global db
+async def delete_user(user_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     
-    result = await db.users.delete_one({"id": user_id})
+    result = await database.users.delete_one({"id": user_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -623,8 +607,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     )
 
 @api_router.post("/auth/change-password")
-async def change_password(password_data: ChangePasswordRequest, current_user: User = Depends(get_current_user)):
-    global db
+async def change_password(password_data: ChangePasswordRequest, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     # Verify current password
     if not verify_password(password_data.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
@@ -633,7 +616,7 @@ async def change_password(password_data: ChangePasswordRequest, current_user: Us
     new_password_hash = hash_password(password_data.new_password)
     
     # Update user password and remove must_change_password flag
-    await db.users.update_one(
+    await database.users.update_one(
         {"id": current_user.id},
         {"$set": {
             "password_hash": new_password_hash,
@@ -645,8 +628,7 @@ async def change_password(password_data: ChangePasswordRequest, current_user: Us
 
 # Player endpoints (with auth protection)
 @api_router.post("/players", response_model=Player)
-async def create_player(player_data: PlayerCreate, current_user: User = Depends(get_current_user)):
-    global db
+async def create_player(player_data: PlayerCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     player_dict = player_data.dict()
     player_obj = Player(**player_dict)
     
@@ -655,26 +637,23 @@ async def create_player(player_data: PlayerCreate, current_user: User = Depends(
     if isinstance(player_dict_for_db["date_of_birth"], date):
         player_dict_for_db["date_of_birth"] = player_dict_for_db["date_of_birth"].isoformat()
     
-    await db.players.insert_one(player_dict_for_db)
+    await database.players.insert_one(player_dict_for_db)
     return player_obj
 
 @api_router.get("/players", response_model=List[Player])
-async def get_players(current_user: User = Depends(get_current_user)):
-    global db
-    players = await db.players.find().to_list(1000)
+async def get_players(current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    players = await database.players.find().to_list(1000)
     return [Player(**player) for player in players]
 
 @api_router.get("/players/{player_id}", response_model=Player)
-async def get_player(player_id: str, current_user: User = Depends(get_current_user)):
-    global db
-    player = await db.players.find_one({"id": player_id})
+async def get_player(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    player = await database.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     return Player(**player)
 
 @api_router.put("/players/{player_id}", response_model=Player)
-async def update_player(player_id: str, player_data: PlayerUpdate, current_user: User = Depends(get_current_user)):
-    global db
+async def update_player(player_id: str, player_data: PlayerUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     update_data = {k: v for k, v in player_data.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
@@ -683,65 +662,59 @@ async def update_player(player_id: str, player_data: PlayerUpdate, current_user:
     if "date_of_birth" in update_data and isinstance(update_data["date_of_birth"], date):
         update_data["date_of_birth"] = update_data["date_of_birth"].isoformat()
     
-    result = await db.players.update_one({"id": player_id}, {"$set": update_data})
+    result = await database.players.update_one({"id": player_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    updated_player = await db.players.find_one({"id": player_id})
+    updated_player = await database.players.find_one({"id": player_id})
     return Player(**updated_player)
 
 @api_router.delete("/players/{player_id}")
-async def delete_player(player_id: str, current_user: User = Depends(get_current_user)):
-    global db
-    result = await db.players.delete_one({"id": player_id})
+async def delete_player(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    result = await database.players.delete_one({"id": player_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Player not found")
     
     # Also delete all sessions for this player
-    await db.sessions.delete_many({"player_id": player_id})
+    await database.sessions.delete_many({"player_id": player_id})
     return {"message": "Player deleted successfully"}
 
 # Coach endpoints (with auth protection)
 @api_router.post("/coaches", response_model=Coach)
-async def create_coach(coach_data: CoachCreate, current_user: User = Depends(get_current_user)):
-    global db
+async def create_coach(coach_data: CoachCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     coach_dict = coach_data.dict()
     coach_obj = Coach(**coach_dict)
-    await db.coaches.insert_one(coach_obj.dict())
+    await database.coaches.insert_one(coach_obj.dict())
     return coach_obj
 
 @api_router.get("/coaches", response_model=List[Coach])
-async def get_coaches(current_user: User = Depends(get_current_user)):
-    global db
-    coaches = await db.coaches.find().to_list(1000)
+async def get_coaches(current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    coaches = await database.coaches.find().to_list(1000)
     return [Coach(**coach) for coach in coaches]
 
 @api_router.get("/coaches/{coach_id}", response_model=Coach)
-async def get_coach(coach_id: str, current_user: User = Depends(get_current_user)):
-    global db
-    coach = await db.coaches.find_one({"id": coach_id})
+async def get_coach(coach_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    coach = await database.coaches.find_one({"id": coach_id})
     if not coach:
         raise HTTPException(status_code=404, detail="Coach not found")
     return Coach(**coach)
 
 @api_router.put("/coaches/{coach_id}", response_model=Coach)
-async def update_coach(coach_id: str, coach_data: CoachUpdate, current_user: User = Depends(get_current_user)):
-    global db
+async def update_coach(coach_id: str, coach_data: CoachUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     update_data = {k: v for k, v in coach_data.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
     
-    result = await db.coaches.update_one({"id": coach_id}, {"$set": update_data})
+    result = await database.coaches.update_one({"id": coach_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Coach not found")
     
-    updated_coach = await db.coaches.find_one({"id": coach_id})
+    updated_coach = await database.coaches.find_one({"id": coach_id})
     return Coach(**updated_coach)
 
 @api_router.delete("/coaches/{coach_id}")
-async def delete_coach(coach_id: str, current_user: User = Depends(get_current_user)):
-    global db
-    result = await db.coaches.delete_one({"id": coach_id})
+async def delete_coach(coach_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    result = await database.coaches.delete_one({"id": coach_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Coach not found")
     return {"message": "Coach deleted successfully"}
@@ -1261,26 +1234,36 @@ async def create_match_participation(participation_data: MatchParticipationCreat
 
 @api_router.get("/match-participations/match/{match_id}", response_model=List[dict])
 async def get_match_participations(match_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    # Get all participations for the match
     participations = await database.match_participations.find({"match_id": match_id}).to_list(100)
-    player_tasks = [database.players.find_one({"id": p["player_id"]}) for p in participations]
-    players = await asyncio.gather(*player_tasks)
-
+    
+    # Enrich with player data
     result = []
-    for participation, player in zip(participations, players):
+    for participation in participations:
+        player = await database.players.find_one({"id": participation["player_id"]})
         if player:
-            result.append({"participation": MatchParticipation(**participation), "player": Player(**player)})
+            result.append({
+                "participation": MatchParticipation(**participation),
+                "player": Player(**player)
+            })
+    
     return result
 
 @api_router.get("/match-participations/player/{player_id}", response_model=List[dict])
 async def get_player_match_participations(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    # Get all participations for the player
     participations = await database.match_participations.find({"player_id": player_id}).to_list(100)
-    match_tasks = [database.matches.find_one({"id": p["match_id"]}) for p in participations]
-    matches = await asyncio.gather(*match_tasks)
-
+    
+    # Enrich with match data
     result = []
-    for participation, match in zip(participations, matches):
+    for participation in participations:
+        match = await database.matches.find_one({"id": participation["match_id"]})
         if match:
-            result.append({"participation": MatchParticipation(**participation), "match": Match(**match)})
+            result.append({
+                "participation": MatchParticipation(**participation),
+                "match": Match(**match)
+            })
+    
     return result
 
 @api_router.put("/match-participations/{participation_id}", response_model=MatchParticipation)
@@ -1334,19 +1317,20 @@ async def create_attendance(attendance_data: AttendanceCreate, current_user: Use
         return attendance_obj
 
 @api_router.get("/attendances/session/{session_id}")
-async def get_session_attendances(
-    session_id: str,
-    current_user: User = Depends(get_current_user),
-    database = Depends(get_database)
-):
+async def get_session_attendances(session_id: str, current_user: User = Depends(get_current_user)):
     attendances = await database.attendances.find({"collective_session_id": session_id}).to_list(100)
-    player_tasks = [database.players.find_one({"id": a["player_id"]}) for a in attendances]
-    players = await asyncio.gather(*player_tasks)
-
+    
+    # Get player info for each attendance
     result = []
-    for attendance, player in zip(attendances, players):
+    for attendance in attendances:
+        player = await database.players.find_one({"id": attendance["player_id"]})
         if player:
-            result.append({**attendance, "player": player})
+            attendance_with_player = {
+                **attendance,
+                "player": player
+            }
+            result.append(attendance_with_player)
+    
     return result
 
 @api_router.get("/attendances/player/{player_id}")
@@ -1599,21 +1583,8 @@ async def delete_session(session_id: str, current_user: User = Depends(get_curre
 
 @api_router.get("/reports/player/{player_id}", response_model=PlayerReport)
 async def get_player_report(player_id: str, current_user: User = Depends(get_current_user), start_date: Optional[str] = None, end_date: Optional[str] = None, database = Depends(get_database)):
-    base_query = {
-        "$or": [
-            {"player_ids": {"$in": [player_id]}},
-            {"player_id": player_id}
-        ]
-    }
-    if start_date and end_date:
-        base_query["session_date"] = {"$gte": start_date, "$lte": end_date}
-
-    player_task = database.players.find_one({"id": player_id})
-    sessions_task = database.sessions.find(base_query).to_list(1000)
-    participations_task = database.match_participations.find({"player_id": player_id}).to_list(1000)
-
-    player, sessions, match_participations = await asyncio.gather(player_task, sessions_task, participations_task)
-
+    # Get player
+    player = await database.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
@@ -1761,24 +1732,24 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
 
 @api_router.get("/reports/coach/{coach_name}", response_model=CoachReport)
 async def get_coach_report(coach_name: str, current_user: User = Depends(get_current_user), start_date: Optional[str] = None, end_date: Optional[str] = None, database = Depends(get_database)):
-    query = {"trainers": {"$in": [coach_name]}}
-    if start_date and end_date:
-        query["session_date"] = {"$gte": start_date, "$lte": end_date}
-
-    coach_task = database.coaches.find_one({
+    # Get coach by name (since coaches are referenced by name in sessions)
+    coach = await database.coaches.find_one({
         "$or": [
             {"first_name": coach_name},
             {"last_name": coach_name},
             {"$expr": {"$eq": [{"$concat": ["$first_name", " ", "$last_name"]}, coach_name]}}
         ]
     })
-    sessions_task = database.sessions.find(query).to_list(1000)
-    players_task = database.players.find().to_list(1000)
-
-    coach, sessions, players = await asyncio.gather(coach_task, sessions_task, players_task)
-
+    
+    # If coach not found in coaches collection, create a virtual coach object
     if not coach:
-        coach = {"id": "virtual", "first_name": coach_name, "last_name": "", "photo": None, "created_at": datetime.utcnow()}
+        coach = {
+            "id": "virtual",
+            "first_name": coach_name,
+            "last_name": "",
+            "photo": None,
+            "created_at": datetime.utcnow()
+        }
     
     # Build query with date filter if provided
     query = {"trainers": {"$in": [coach_name]}}
@@ -1849,10 +1820,7 @@ async def get_coach_report(coach_name: str, current_user: User = Depends(get_cur
     )
 
 @api_router.get("/calendar")
-async def get_calendar_data(
-    current_user: User = Depends(get_current_user),
-    database = Depends(get_database)
-):
+async def get_calendar_data(current_user: User = Depends(get_current_user), database = Depends(get_database)):
     sessions = await database.sessions.find().to_list(1000)
     players = await database.players.find().to_list(1000)
     
@@ -2145,7 +2113,7 @@ app.include_router(api_router)
 async def initialize_data():
     logger.info("Startup: ENV=%s DB_NAME=%s", ENVIRONMENT, os.environ.get('DB_NAME'))
     # Check if admin user exists
-    admin_user = await db.users.find_one({"role": "admin"})
+    admin_user = await database.users.find_one({"role": "admin"})
     if not admin_user:
         # Create default admin user
         admin_password_hash = hash_password("admin123")  # Change this password!
@@ -2160,11 +2128,11 @@ async def initialize_data():
             "created_at": datetime.utcnow(),
             "last_login": None
         }
-        await db.users.insert_one(admin_user_data)
+        await database.users.insert_one(admin_user_data)
         logger.info("Admin user created: admin@staderochelais.com / admin123")
     
     # Check if coaches already exist
-    existing_coaches = await db.coaches.count_documents({})
+    existing_coaches = await database.coaches.count_documents({})
     if existing_coaches == 0:
         # Create default coaches
         default_coaches = [
@@ -2205,12 +2173,12 @@ async def initialize_data():
             }
         ]
         
-        await db.coaches.insert_many(default_coaches)
+        await database.coaches.insert_many(default_coaches)
         logger.info("Coaches initialisés avec succès")
     
     # Update theme names in existing sessions
     try:
-        await db.sessions.update_many(
+        await database.sessions.update_many(
             {"themes": {"$in": ["Écran et remise"]}},
             {"$set": {"themes.$": "Écran et lecture"}}
         )

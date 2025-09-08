@@ -2,14 +2,6 @@ import React, { useState, useEffect, createContext, useContext } from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import axios from "axios";
-// Axios global interceptor to always attach token if present
-axios.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
 import EvaluationModal from "./EvaluationModal";
 import ReportsWithEvaluation from "./ReportsWithEvaluation";
 import AttendanceManager from "./AttendanceManager";
@@ -172,16 +164,18 @@ const EVALUATION_THEMES = [
 
 // API base: in production we go through a Vercel rewrite to avoid CORS ("/api"),
 // in local dev we use the explicit backend URL (from .env) or fallback to localhost:8000.
+// Prod = domaine du back ; Dev = .env local ou localhost:8000
 const isLocalhost =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
 const LOCAL_BACKEND = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 
-// 👉 En prod, on appelle simplement /api (géré par vercel.json vers ton backend)
-const PROD_BACKEND = '/api';
+// 👉 En prod on pointe vers le BACK (variable d'env Vercel FRONT)
+const PROD_BACKEND = (process.env.REACT_APP_BACKEND_URL && process.env.REACT_APP_BACKEND_URL.trim()) || 'https://basketball-manager-kappa.vercel.app';
 
-const API = isLocalhost ? `${LOCAL_BACKEND}/api` : PROD_BACKEND;
+// Toutes les routes front appellent /api sur le domaine du BACK
+const API = isLocalhost ? `${LOCAL_BACKEND}/api` : `${PROD_BACKEND}/api`;
 if (typeof window !== 'undefined') {
   console.log('[API CONFIG]', { isLocalhost, LOCAL_BACKEND, PROD_BACKEND, API });
 }
