@@ -58,9 +58,6 @@ async def db_ping():
 # Security
 security = HTTPBearer(auto_error=False)
 
-# --- DB dependency (use global client) ---
-async def get_database():
-    yield db
 
 app = FastAPI()
 
@@ -412,16 +409,17 @@ def decode_token(token: str) -> dict:
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), database = Depends(get_database)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    global db
     if not credentials or not credentials.scheme or not credentials.credentials:
         logger.warning("Auth failed: No credentials provided")
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         payload = decode_token(credentials.credentials)
-        user = await database.users.find_one({"id": payload["user_id"]})
+        user = await db.users.find_one({"id": payload["user_id"]})
         # Fallback lookup by email if user not found by id and email is present in payload
         if not user and "email" in payload:
-            user = await database.users.find_one({"email": payload["email"]})
+            user = await db.users.find_one({"email": payload["email"]})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return User(**user)
@@ -444,9 +442,10 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 
 # Authentication endpoints
 @api_router.post("/auth/login", response_model=LoginResponse)
-async def login(login_data: UserLogin, database = Depends(get_database)):
+async def login(login_data: UserLogin):
+    global db
     try:
-        user = await database.users.find_one({"email": login_data.email})
+        user = await db.users.find_one({"email": login_data.email})
         if not user:
             logger.error(f"Login failed: no user found for email={login_data.email}")
             raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -460,7 +459,7 @@ async def login(login_data: UserLogin, database = Depends(get_database)):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         # update last_login
-        await database.users.update_one(
+        await db.users.update_one(
             {"id": user["id"]},
             {"$set": {"last_login": datetime.utcnow()}}
         )
@@ -489,13 +488,14 @@ class ResetAdminBody(BaseModel):
     last_name: Optional[str] = "Stade Rochelais"
 
 @api_router.get("/dev/admin-status")
-async def admin_status(request: Request, database = Depends(get_database)):
+async def admin_status(request: Request):
+    global db
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
-        total = await database.users.count_documents({})
-        admin_doc = await database.users.find_one({"role": "admin"})
-        default_email_doc = await database.users.find_one({"email": "admin@staderochelais.com"})
+        total = await db.users.count_documents({})
+        admin_doc = await db.users.find_one({"role": "admin"})
+        default_email_doc = await db.users.find_one({"email": "admin@staderochelais.com"})
         return {
             "total_users": total,
             "has_admin": bool(admin_doc),
@@ -508,14 +508,15 @@ async def admin_status(request: Request, database = Depends(get_database)):
         raise HTTPException(status_code=500, detail=f"Admin status error: {str(e)}")
 
 @api_router.post("/dev/reset-admin")
-async def dev_reset_admin(body: ResetAdminBody, request: Request, database = Depends(get_database)):
+async def dev_reset_admin(body: ResetAdminBody, request: Request):
+    global db
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
 
         pwd_hash = hash_password(body.password)
         now = datetime.utcnow()
-        existing = await database.users.find_one({"email": body.email})
+        existing = await db.users.find_one({"email": body.email})
         data = {
             "email": body.email,
             "password_hash": pwd_hash,
@@ -526,12 +527,12 @@ async def dev_reset_admin(body: ResetAdminBody, request: Request, database = Dep
             "last_login": None,
         }
         if existing:
-            await database.users.update_one({"email": body.email}, {"$set": data})
+            await db.users.update_one({"email": body.email}, {"$set": data})
             user_id = existing.get("id")
             action = "updated"
         else:
             new_user = {"id": str(uuid.uuid4()), **data, "created_at": now}
-            await database.users.insert_one(new_user)
+            await db.users.insert_one(new_user)
             user_id = new_user["id"]
             action = "created"
 
@@ -556,9 +557,10 @@ async def dev_check_env(request: Request):
     }
 
 @api_router.post("/auth/create-user", response_model=UserResponse)
-async def create_user(user_data: UserCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_user(user_data: UserCreate, current_user: User = Depends(get_current_user)):
+    global db
     # Check if user already exists
-    existing_user = await database.users.find_one({"email": user_data.email})
+    existing_user = await db.users.find_one({"email": user_data.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="User with this email already exists")
     
@@ -570,7 +572,7 @@ async def create_user(user_data: UserCreate, current_user: User = Depends(get_cu
     del user_dict['password']
     
     user_obj = User(**user_dict)
-    await database.users.insert_one(user_obj.dict())
+    await db.users.insert_one(user_obj.dict())
     
     return UserResponse(
         id=user_obj.id,
@@ -583,8 +585,9 @@ async def create_user(user_data: UserCreate, current_user: User = Depends(get_cu
     )
 
 @api_router.get("/auth/users", response_model=List[UserResponse])
-async def get_users(current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    users = await database.users.find().to_list(1000)
+async def get_users(current_user: User = Depends(get_current_user)):
+    global db
+    users = await db.users.find().to_list(1000)
     return [UserResponse(
         id=user['id'],
         email=user['email'],
@@ -596,11 +599,12 @@ async def get_users(current_user: User = Depends(get_current_user), database = D
     ) for user in users]
 
 @api_router.delete("/auth/users/{user_id}")
-async def delete_user(user_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_user(user_id: str, current_user: User = Depends(get_current_user)):
+    global db
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     
-    result = await database.users.delete_one({"id": user_id})
+    result = await db.users.delete_one({"id": user_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -619,7 +623,8 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     )
 
 @api_router.post("/auth/change-password")
-async def change_password(password_data: ChangePasswordRequest, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def change_password(password_data: ChangePasswordRequest, current_user: User = Depends(get_current_user)):
+    global db
     # Verify current password
     if not verify_password(password_data.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
@@ -628,7 +633,7 @@ async def change_password(password_data: ChangePasswordRequest, current_user: Us
     new_password_hash = hash_password(password_data.new_password)
     
     # Update user password and remove must_change_password flag
-    await database.users.update_one(
+    await db.users.update_one(
         {"id": current_user.id},
         {"$set": {
             "password_hash": new_password_hash,
@@ -640,7 +645,8 @@ async def change_password(password_data: ChangePasswordRequest, current_user: Us
 
 # Player endpoints (with auth protection)
 @api_router.post("/players", response_model=Player)
-async def create_player(player_data: PlayerCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_player(player_data: PlayerCreate, current_user: User = Depends(get_current_user)):
+    global db
     player_dict = player_data.dict()
     player_obj = Player(**player_dict)
     
@@ -649,23 +655,26 @@ async def create_player(player_data: PlayerCreate, current_user: User = Depends(
     if isinstance(player_dict_for_db["date_of_birth"], date):
         player_dict_for_db["date_of_birth"] = player_dict_for_db["date_of_birth"].isoformat()
     
-    await database.players.insert_one(player_dict_for_db)
+    await db.players.insert_one(player_dict_for_db)
     return player_obj
 
 @api_router.get("/players", response_model=List[Player])
-async def get_players(current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    players = await database.players.find().to_list(1000)
+async def get_players(current_user: User = Depends(get_current_user)):
+    global db
+    players = await db.players.find().to_list(1000)
     return [Player(**player) for player in players]
 
 @api_router.get("/players/{player_id}", response_model=Player)
-async def get_player(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    player = await database.players.find_one({"id": player_id})
+async def get_player(player_id: str, current_user: User = Depends(get_current_user)):
+    global db
+    player = await db.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     return Player(**player)
 
 @api_router.put("/players/{player_id}", response_model=Player)
-async def update_player(player_id: str, player_data: PlayerUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_player(player_id: str, player_data: PlayerUpdate, current_user: User = Depends(get_current_user)):
+    global db
     update_data = {k: v for k, v in player_data.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
@@ -674,59 +683,65 @@ async def update_player(player_id: str, player_data: PlayerUpdate, current_user:
     if "date_of_birth" in update_data and isinstance(update_data["date_of_birth"], date):
         update_data["date_of_birth"] = update_data["date_of_birth"].isoformat()
     
-    result = await database.players.update_one({"id": player_id}, {"$set": update_data})
+    result = await db.players.update_one({"id": player_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    updated_player = await database.players.find_one({"id": player_id})
+    updated_player = await db.players.find_one({"id": player_id})
     return Player(**updated_player)
 
 @api_router.delete("/players/{player_id}")
-async def delete_player(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    result = await database.players.delete_one({"id": player_id})
+async def delete_player(player_id: str, current_user: User = Depends(get_current_user)):
+    global db
+    result = await db.players.delete_one({"id": player_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Player not found")
     
     # Also delete all sessions for this player
-    await database.sessions.delete_many({"player_id": player_id})
+    await db.sessions.delete_many({"player_id": player_id})
     return {"message": "Player deleted successfully"}
 
 # Coach endpoints (with auth protection)
 @api_router.post("/coaches", response_model=Coach)
-async def create_coach(coach_data: CoachCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_coach(coach_data: CoachCreate, current_user: User = Depends(get_current_user)):
+    global db
     coach_dict = coach_data.dict()
     coach_obj = Coach(**coach_dict)
-    await database.coaches.insert_one(coach_obj.dict())
+    await db.coaches.insert_one(coach_obj.dict())
     return coach_obj
 
 @api_router.get("/coaches", response_model=List[Coach])
-async def get_coaches(current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    coaches = await database.coaches.find().to_list(1000)
+async def get_coaches(current_user: User = Depends(get_current_user)):
+    global db
+    coaches = await db.coaches.find().to_list(1000)
     return [Coach(**coach) for coach in coaches]
 
 @api_router.get("/coaches/{coach_id}", response_model=Coach)
-async def get_coach(coach_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    coach = await database.coaches.find_one({"id": coach_id})
+async def get_coach(coach_id: str, current_user: User = Depends(get_current_user)):
+    global db
+    coach = await db.coaches.find_one({"id": coach_id})
     if not coach:
         raise HTTPException(status_code=404, detail="Coach not found")
     return Coach(**coach)
 
 @api_router.put("/coaches/{coach_id}", response_model=Coach)
-async def update_coach(coach_id: str, coach_data: CoachUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_coach(coach_id: str, coach_data: CoachUpdate, current_user: User = Depends(get_current_user)):
+    global db
     update_data = {k: v for k, v in coach_data.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
     
-    result = await database.coaches.update_one({"id": coach_id}, {"$set": update_data})
+    result = await db.coaches.update_one({"id": coach_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Coach not found")
     
-    updated_coach = await database.coaches.find_one({"id": coach_id})
+    updated_coach = await db.coaches.find_one({"id": coach_id})
     return Coach(**updated_coach)
 
 @api_router.delete("/coaches/{coach_id}")
-async def delete_coach(coach_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    result = await database.coaches.delete_one({"id": coach_id})
+async def delete_coach(coach_id: str, current_user: User = Depends(get_current_user)):
+    global db
+    result = await db.coaches.delete_one({"id": coach_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Coach not found")
     return {"message": "Coach deleted successfully"}
