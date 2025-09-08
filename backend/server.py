@@ -49,7 +49,7 @@ db = None
 # DB ping helper for health endpoint
 async def db_ping():
     try:
-        await database.command("ping")
+        await db.command("ping")
         return True, "ok"
     except Exception as e:
         logger.exception("DB ping failed: %s", e)
@@ -408,7 +408,7 @@ def decode_token(token: str) -> dict:
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), database = Depends(get_database)):
     if not credentials or not credentials.scheme or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
@@ -430,7 +430,7 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 
 # Authentication endpoints
 @api_router.post("/auth/login", response_model=LoginResponse)
-async def login(login_data: UserLogin):
+async def login(login_data: UserLogin, database = Depends(get_database)):
     try:
         user = await database.users.find_one({"email": login_data.email})
         if not user or not verify_password(login_data.password, user['password_hash']):
@@ -466,7 +466,7 @@ class ResetAdminBody(BaseModel):
     last_name: Optional[str] = "Stade Rochelais"
 
 @api_router.get("/dev/admin-status")
-async def admin_status(request: Request):
+async def admin_status(request: Request, database = Depends(get_database)):
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -485,7 +485,7 @@ async def admin_status(request: Request):
         raise HTTPException(status_code=500, detail=f"Admin status error: {str(e)}")
 
 @api_router.post("/dev/reset-admin")
-async def dev_reset_admin(body: ResetAdminBody, request: Request):
+async def dev_reset_admin(body: ResetAdminBody, request: Request, database = Depends(get_database)):
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -1296,7 +1296,11 @@ async def create_attendance(attendance_data: AttendanceCreate, current_user: Use
         return attendance_obj
 
 @api_router.get("/attendances/session/{session_id}")
-async def get_session_attendances(session_id: str, current_user: User = Depends(get_current_user)):
+async def get_session_attendances(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    database = Depends(get_database)
+):
     attendances = await database.attendances.find({"collective_session_id": session_id}).to_list(100)
     player_tasks = [database.players.find_one({"id": a["player_id"]}) for a in attendances]
     players = await asyncio.gather(*player_tasks)
@@ -1807,7 +1811,10 @@ async def get_coach_report(coach_name: str, current_user: User = Depends(get_cur
     )
 
 @api_router.get("/calendar")
-async def get_calendar_data(current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def get_calendar_data(
+    current_user: User = Depends(get_current_user),
+    database = Depends(get_database)
+):
     sessions = await database.sessions.find().to_list(1000)
     players = await database.players.find().to_list(1000)
     
