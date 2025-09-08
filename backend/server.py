@@ -429,9 +429,7 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 
 # Authentication endpoints
 @api_router.post("/auth/login", response_model=LoginResponse)
-async def login(login_data: UserLogin):
-    client_local = AsyncIOMotorClient(mongo_url)
-    database = client_local[DB_NAME]
+async def login(login_data: UserLogin, database = Depends(get_database)):
     try:
         user = await database.users.find_one({"email": login_data.email})
         if not user or not verify_password(login_data.password, user['password_hash']):
@@ -459,8 +457,6 @@ async def login(login_data: UserLogin):
     except Exception as e:
         logger.exception("Login failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
-    finally:
-        client_local.close()
 
 class ResetAdminBody(BaseModel):
     email: Optional[str] = "admin@staderochelais.com"
@@ -469,9 +465,7 @@ class ResetAdminBody(BaseModel):
     last_name: Optional[str] = "Stade Rochelais"
 
 @api_router.get("/dev/admin-status")
-async def admin_status(request: Request):
-    client_local = AsyncIOMotorClient(mongo_url)
-    database = client_local[DB_NAME]
+async def admin_status(request: Request, database = Depends(get_database)):
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -488,13 +482,9 @@ async def admin_status(request: Request):
     except Exception as e:
         logger.exception("admin-status error: %s", e)
         raise HTTPException(status_code=500, detail=f"Admin status error: {str(e)}")
-    finally:
-        client_local.close()
 
 @api_router.post("/dev/reset-admin")
-async def dev_reset_admin(body: ResetAdminBody, request: Request):
-    client_local = AsyncIOMotorClient(mongo_url)
-    database = client_local[DB_NAME]
+async def dev_reset_admin(body: ResetAdminBody, request: Request, database = Depends(get_database)):
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -528,12 +518,10 @@ async def dev_reset_admin(body: ResetAdminBody, request: Request):
     except Exception as e:
         logger.exception("reset-admin error: %s", e)
         raise HTTPException(status_code=500, detail=f"Reset admin error: {str(e)}")
-    finally:
-        client_local.close()
 
 # Environment sanity-check endpoint
 @api_router.get("/dev/check-env")
-async def dev_check_env(request: Request):
+async def dev_check_env(request: Request, database = Depends(get_database)):
     if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
         raise HTTPException(status_code=403, detail="Forbidden")
     return {
