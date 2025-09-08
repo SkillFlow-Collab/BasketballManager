@@ -447,7 +447,6 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 async def login(login_data: UserLogin, database = Depends(get_database)):
     try:
         user = await database.users.find_one({"email": login_data.email})
-        user = dict(user) if user else None
         if not user:
             logger.error(f"Login failed: no user found for email={login_data.email}")
             raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -466,7 +465,6 @@ async def login(login_data: UserLogin, database = Depends(get_database)):
             {"$set": {"last_login": datetime.utcnow()}}
         )
 
-        # Ensure user is a dict for Pydantic
         token = create_token(user)
         user_response = UserResponse(
             id=user['id'],
@@ -479,9 +477,11 @@ async def login(login_data: UserLogin, database = Depends(get_database)):
         )
         return LoginResponse(token=token, user=user_response)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Login failed for {login_data.email}: {e}")
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Login failed")
 class ResetAdminBody(BaseModel):
     email: Optional[str] = "admin@staderochelais.com"
     password: Optional[str] = "admin123"
