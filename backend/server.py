@@ -458,14 +458,9 @@ async def login(login_data: UserLogin, database = Depends(get_database)):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         # update last_login
-        import asyncio
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,
-            lambda: database.users.update_one(
-                {"id": user["id"]},
-                {"$set": {"last_login": datetime.utcnow()}}
-            )
+        await database.users.update_one(
+            {"id": user["id"]},
+            {"$set": {"last_login": datetime.utcnow()}}
         )
 
         # Ensure user is a dict for Pydantic
