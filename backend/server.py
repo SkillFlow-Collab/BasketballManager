@@ -84,21 +84,17 @@ async def shutdown_event():
 # --- CORS (vercel + local) ---
 from starlette.middleware.cors import CORSMiddleware
 
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "https://basketball-manager-msoh.vercel.app",
-    "https://basketball-manager-kappa.vercel.app",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=[
+        "http://localhost:3000",
+        "https://basketball-manager-msoh.vercel.app",
+        "https://basketball-manager-kappa.vercel.app",
+    ],
     allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=86400,
 )
 
 # Create a router with the /api prefix
