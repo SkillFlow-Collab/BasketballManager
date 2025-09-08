@@ -4,8 +4,8 @@
   "outputDirectory": "build",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://basketball-manager-kappa.vercel.app/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "https://basketball-manager-kappa.vercel.app/api/$1"
     }
   ]
 }
