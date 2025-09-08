@@ -4,6 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+import asyncio
 import os
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -42,32 +43,39 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://basketball-manager-msoh.v
 mongo_url = os.environ['MONGO_URL']
 DB_NAME = os.environ['DB_NAME']
 
+mongo_client: AsyncIOMotorClient = None
+db = None
+
 # DB ping helper for health endpoint
 async def db_ping():
-    client_local = AsyncIOMotorClient(mongo_url)
     try:
-        await client_local[DB_NAME].command("ping")
+        await db.command("ping")
         return True, "ok"
     except Exception as e:
         logger.exception("DB ping failed: %s", e)
         return False, str(e)
-    finally:
-        client_local.close()
 
 # Security
 security = HTTPBearer(auto_error=False)
 
-# --- DB dependency (serverless-safe) ---
-# Un client Motor par requête pour éviter les erreurs d'event loop en serverless.
+# --- DB dependency (use global client) ---
 async def get_database():
-    client_local = AsyncIOMotorClient(mongo_url)
-    try:
-        yield client_local[DB_NAME]
-    finally:
-        client_local.close()
+    yield db
 
-# Create the main app without a prefix
 app = FastAPI()
+
+# --- FastAPI startup/shutdown events for MongoDB connection ---
+@app.on_event("startup")
+async def startup_event():
+    global mongo_client, db
+    mongo_client = AsyncIOMotorClient(mongo_url)
+    db = mongo_client[DB_NAME]
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global mongo_client
+    if mongo_client:
+        mongo_client.close()
 
 # --- CORS (vercel + local) ---
 from starlette.middleware.cors import CORSMiddleware
@@ -403,24 +411,17 @@ def decode_token(token: str) -> dict:
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     if not credentials or not credentials.scheme or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    client_local = AsyncIOMotorClient(mongo_url)
-    database = client_local[DB_NAME]
     try:
         payload = decode_token(credentials.credentials)
-        user = await database.users.find_one({"id": payload["user_id"]})
+        user = await db.users.find_one({"id": payload["user_id"]})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return User(**user)
     except HTTPException:
-        # Laisse passer les 401/403 proprement (CORS s'appliquera)
         raise
     except Exception as e:
         logger.exception("get_current_user error: %s", e)
-        # Évite un 500 plateforme (souvent sans headers CORS)
         raise HTTPException(status_code=401, detail="Auth check failed")
-    finally:
-        client_local.close()
 
 async def get_admin_user(current_user: User = Depends(get_current_user)):
     if current_user.role != 'admin':
@@ -430,15 +431,13 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 # Authentication endpoints
 @api_router.post("/auth/login", response_model=LoginResponse)
 async def login(login_data: UserLogin):
-    client_local = AsyncIOMotorClient(mongo_url)
-    database = client_local[DB_NAME]
     try:
-        user = await database.users.find_one({"email": login_data.email})
+        user = await db.users.find_one({"email": login_data.email})
         if not user or not verify_password(login_data.password, user['password_hash']):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         # Update last login
-        await database.users.update_one(
+        await db.users.update_one(
             {"id": user['id']},
             {"$set": {"last_login": datetime.utcnow()}}
         )
@@ -459,8 +458,6 @@ async def login(login_data: UserLogin):
     except Exception as e:
         logger.exception("Login failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
-    finally:
-        client_local.close()
 
 class ResetAdminBody(BaseModel):
     email: Optional[str] = "admin@staderochelais.com"
@@ -470,14 +467,12 @@ class ResetAdminBody(BaseModel):
 
 @api_router.get("/dev/admin-status")
 async def admin_status(request: Request):
-    client_local = AsyncIOMotorClient(mongo_url)
-    database = client_local[DB_NAME]
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
-        total = await database.users.count_documents({})
-        admin_doc = await database.users.find_one({"role": "admin"})
-        default_email_doc = await database.users.find_one({"email": "admin@staderochelais.com"})
+        total = await db.users.count_documents({})
+        admin_doc = await db.users.find_one({"role": "admin"})
+        default_email_doc = await db.users.find_one({"email": "admin@staderochelais.com"})
         return {
             "total_users": total,
             "has_admin": bool(admin_doc),
@@ -488,20 +483,16 @@ async def admin_status(request: Request):
     except Exception as e:
         logger.exception("admin-status error: %s", e)
         raise HTTPException(status_code=500, detail=f"Admin status error: {str(e)}")
-    finally:
-        client_local.close()
 
 @api_router.post("/dev/reset-admin")
 async def dev_reset_admin(body: ResetAdminBody, request: Request):
-    client_local = AsyncIOMotorClient(mongo_url)
-    database = client_local[DB_NAME]
     try:
         if not ADMIN_RESET_TOKEN or request.headers.get("x-admin-reset") != ADMIN_RESET_TOKEN:
             raise HTTPException(status_code=403, detail="Forbidden")
 
         pwd_hash = hash_password(body.password)
         now = datetime.utcnow()
-        existing = await database.users.find_one({"email": body.email})
+        existing = await db.users.find_one({"email": body.email})
         data = {
             "email": body.email,
             "password_hash": pwd_hash,
@@ -512,12 +503,12 @@ async def dev_reset_admin(body: ResetAdminBody, request: Request):
             "last_login": None,
         }
         if existing:
-            await database.users.update_one({"email": body.email}, {"$set": data})
+            await db.users.update_one({"email": body.email}, {"$set": data})
             user_id = existing.get("id")
             action = "updated"
         else:
             new_user = {"id": str(uuid.uuid4()), **data, "created_at": now}
-            await database.users.insert_one(new_user)
+            await db.users.insert_one(new_user)
             user_id = new_user["id"]
             action = "created"
 
@@ -528,8 +519,6 @@ async def dev_reset_admin(body: ResetAdminBody, request: Request):
     except Exception as e:
         logger.exception("reset-admin error: %s", e)
         raise HTTPException(status_code=500, detail=f"Reset admin error: {str(e)}")
-    finally:
-        client_local.close()
 
 # Environment sanity-check endpoint
 @api_router.get("/dev/check-env")
@@ -1234,36 +1223,26 @@ async def create_match_participation(participation_data: MatchParticipationCreat
 
 @api_router.get("/match-participations/match/{match_id}", response_model=List[dict])
 async def get_match_participations(match_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    # Get all participations for the match
     participations = await database.match_participations.find({"match_id": match_id}).to_list(100)
-    
-    # Enrich with player data
+    player_tasks = [database.players.find_one({"id": p["player_id"]}) for p in participations]
+    players = await asyncio.gather(*player_tasks)
+
     result = []
-    for participation in participations:
-        player = await database.players.find_one({"id": participation["player_id"]})
+    for participation, player in zip(participations, players):
         if player:
-            result.append({
-                "participation": MatchParticipation(**participation),
-                "player": Player(**player)
-            })
-    
+            result.append({"participation": MatchParticipation(**participation), "player": Player(**player)})
     return result
 
 @api_router.get("/match-participations/player/{player_id}", response_model=List[dict])
 async def get_player_match_participations(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    # Get all participations for the player
     participations = await database.match_participations.find({"player_id": player_id}).to_list(100)
-    
-    # Enrich with match data
+    match_tasks = [database.matches.find_one({"id": p["match_id"]}) for p in participations]
+    matches = await asyncio.gather(*match_tasks)
+
     result = []
-    for participation in participations:
-        match = await database.matches.find_one({"id": participation["match_id"]})
+    for participation, match in zip(participations, matches):
         if match:
-            result.append({
-                "participation": MatchParticipation(**participation),
-                "match": Match(**match)
-            })
-    
+            result.append({"participation": MatchParticipation(**participation), "match": Match(**match)})
     return result
 
 @api_router.put("/match-participations/{participation_id}", response_model=MatchParticipation)
@@ -1319,18 +1298,13 @@ async def create_attendance(attendance_data: AttendanceCreate, current_user: Use
 @api_router.get("/attendances/session/{session_id}")
 async def get_session_attendances(session_id: str, current_user: User = Depends(get_current_user)):
     attendances = await database.attendances.find({"collective_session_id": session_id}).to_list(100)
-    
-    # Get player info for each attendance
+    player_tasks = [database.players.find_one({"id": a["player_id"]}) for a in attendances]
+    players = await asyncio.gather(*player_tasks)
+
     result = []
-    for attendance in attendances:
-        player = await database.players.find_one({"id": attendance["player_id"]})
+    for attendance, player in zip(attendances, players):
         if player:
-            attendance_with_player = {
-                **attendance,
-                "player": player
-            }
-            result.append(attendance_with_player)
-    
+            result.append({**attendance, "player": player})
     return result
 
 @api_router.get("/attendances/player/{player_id}")
@@ -1583,8 +1557,21 @@ async def delete_session(session_id: str, current_user: User = Depends(get_curre
 
 @api_router.get("/reports/player/{player_id}", response_model=PlayerReport)
 async def get_player_report(player_id: str, current_user: User = Depends(get_current_user), start_date: Optional[str] = None, end_date: Optional[str] = None, database = Depends(get_database)):
-    # Get player
-    player = await database.players.find_one({"id": player_id})
+    base_query = {
+        "$or": [
+            {"player_ids": {"$in": [player_id]}},
+            {"player_id": player_id}
+        ]
+    }
+    if start_date and end_date:
+        base_query["session_date"] = {"$gte": start_date, "$lte": end_date}
+
+    player_task = database.players.find_one({"id": player_id})
+    sessions_task = database.sessions.find(base_query).to_list(1000)
+    participations_task = database.match_participations.find({"player_id": player_id}).to_list(1000)
+
+    player, sessions, match_participations = await asyncio.gather(player_task, sessions_task, participations_task)
+
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
@@ -1732,24 +1719,24 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
 
 @api_router.get("/reports/coach/{coach_name}", response_model=CoachReport)
 async def get_coach_report(coach_name: str, current_user: User = Depends(get_current_user), start_date: Optional[str] = None, end_date: Optional[str] = None, database = Depends(get_database)):
-    # Get coach by name (since coaches are referenced by name in sessions)
-    coach = await database.coaches.find_one({
+    query = {"trainers": {"$in": [coach_name]}}
+    if start_date and end_date:
+        query["session_date"] = {"$gte": start_date, "$lte": end_date}
+
+    coach_task = database.coaches.find_one({
         "$or": [
             {"first_name": coach_name},
             {"last_name": coach_name},
             {"$expr": {"$eq": [{"$concat": ["$first_name", " ", "$last_name"]}, coach_name]}}
         ]
     })
-    
-    # If coach not found in coaches collection, create a virtual coach object
+    sessions_task = database.sessions.find(query).to_list(1000)
+    players_task = database.players.find().to_list(1000)
+
+    coach, sessions, players = await asyncio.gather(coach_task, sessions_task, players_task)
+
     if not coach:
-        coach = {
-            "id": "virtual",
-            "first_name": coach_name,
-            "last_name": "",
-            "photo": None,
-            "created_at": datetime.utcnow()
-        }
+        coach = {"id": "virtual", "first_name": coach_name, "last_name": "", "photo": None, "created_at": datetime.utcnow()}
     
     # Build query with date filter if provided
     query = {"trainers": {"$in": [coach_name]}}
