@@ -419,6 +419,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     try:
         payload = decode_token(credentials.credentials)
         user = await database.users.find_one({"id": payload["user_id"]})
+        # Fallback lookup by email if user not found by id and email is present in payload
+        if not user and "email" in payload:
+            user = await database.users.find_one({"email": payload["email"]})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return User(**user)
