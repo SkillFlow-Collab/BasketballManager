@@ -44,30 +44,41 @@ DB_NAME = os.environ['DB_NAME']
 
 # DB ping helper for health endpoint
 async def db_ping():
-    client_local = AsyncIOMotorClient(mongo_url)
+    client = app.state.client
     try:
-        await client_local[DB_NAME].command("ping")
+        await client[DB_NAME].command("ping")
         return True, "ok"
     except Exception as e:
         logger.exception("DB ping failed: %s", e)
         return False, str(e)
-    finally:
-        client_local.close()
 
 # Security
 security = HTTPBearer(auto_error=False)
 
-# --- DB dependency (serverless-safe) ---
-# Un client Motor par requête pour éviter les erreurs d'event loop en serverless.
+# --- DB dependency (global client) ---
 async def get_database():
-    client_local = AsyncIOMotorClient(mongo_url)
-    try:
-        yield client_local[DB_NAME]
-    finally:
-        client_local.close()
+    return app.state.db
 
 # Create the main app without a prefix
 app = FastAPI()
+
+# --- Startup & Shutdown Events for MongoDB global client ---
+@app.on_event("startup")
+async def startup_event():
+    app.state.client = AsyncIOMotorClient(mongo_url)
+    app.state.db = app.state.client[DB_NAME]
+    db = app.state.db
+    # Ensure indexes are created
+    await db.users.create_index("email", unique=True)
+    await db.users.create_index("id", unique=True)
+    await db.players.create_index("id", unique=True)
+    await db.sessions.create_index("player_ids")
+    await db.matches.create_index("id", unique=True)
+    await db.match_participations.create_index([("match_id", 1), ("player_id", 1)])
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    app.state.client.close()
 
 # --- CORS (vercel + local) ---
 from starlette.middleware.cors import CORSMiddleware
@@ -404,8 +415,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if not credentials or not credentials.scheme or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    client_local = AsyncIOMotorClient(mongo_url)
-    database = client_local[DB_NAME]
+    database = await get_database()
     try:
         payload = decode_token(credentials.credentials)
         user = await database.users.find_one({"id": payload["user_id"]})
@@ -419,8 +429,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         logger.exception("get_current_user error: %s", e)
         # Évite un 500 plateforme (souvent sans headers CORS)
         raise HTTPException(status_code=401, detail="Auth check failed")
-    finally:
-        client_local.close()
 
 async def get_admin_user(current_user: User = Depends(get_current_user)):
     if current_user.role != 'admin':
@@ -1224,34 +1232,30 @@ async def create_match_participation(participation_data: MatchParticipationCreat
 async def get_match_participations(match_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     # Get all participations for the match
     participations = await database.match_participations.find({"match_id": match_id}).to_list(100)
-    
-    # Enrich with player data
+    # Enrich with player data (parallelized)
+    players = await asyncio.gather(*[database.players.find_one({"id": p["player_id"]}) for p in participations])
     result = []
-    for participation in participations:
-        player = await database.players.find_one({"id": participation["player_id"]})
+    for participation, player in zip(participations, players):
         if player:
             result.append({
                 "participation": MatchParticipation(**participation),
                 "player": Player(**player)
             })
-    
     return result
 
 @api_router.get("/match-participations/player/{player_id}", response_model=List[dict])
 async def get_player_match_participations(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     # Get all participations for the player
     participations = await database.match_participations.find({"player_id": player_id}).to_list(100)
-    
-    # Enrich with match data
+    # Enrich with match data (parallelized)
+    matches = await asyncio.gather(*[database.matches.find_one({"id": p["match_id"]}) for p in participations])
     result = []
-    for participation in participations:
-        match = await database.matches.find_one({"id": participation["match_id"]})
+    for participation, match in zip(participations, matches):
         if match:
             result.append({
                 "participation": MatchParticipation(**participation),
                 "match": Match(**match)
             })
-    
     return result
 
 @api_router.put("/match-participations/{participation_id}", response_model=MatchParticipation)
