@@ -414,6 +414,7 @@ def decode_token(token: str) -> dict:
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), database = Depends(get_database)):
     if not credentials or not credentials.scheme or not credentials.credentials:
+        logger.warning("Auth failed: No credentials provided")
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         payload = decode_token(credentials.credentials)
@@ -421,10 +422,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return User(**user)
+    except jwt.ExpiredSignatureError:
+        logger.warning("Auth failed: Token expired")
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        logger.warning("Auth failed: Invalid token")
+        raise HTTPException(status_code=401, detail="Invalid token")
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("get_current_user error: %s", e)
+        logger.exception("Auth check failed: %s", e)
         raise HTTPException(status_code=401, detail="Auth check failed")
 
 async def get_admin_user(current_user: User = Depends(get_current_user)):
@@ -437,6 +444,7 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 async def login(login_data: UserLogin, database = Depends(get_database)):
     try:
         user = await database.users.find_one({"email": login_data.email})
+        user = dict(user) if user else None
         if not user:
             logger.error(f"Login failed: no user found for email={login_data.email}")
             raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -450,11 +458,17 @@ async def login(login_data: UserLogin, database = Depends(get_database)):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         # update last_login
-        await database.users.update_one(
-            {"id": user["id"]},
-            {"$set": {"last_login": datetime.utcnow()}}
+        import asyncio
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: database.users.update_one(
+                {"id": user["id"]},
+                {"$set": {"last_login": datetime.utcnow()}}
+            )
         )
 
+        # Ensure user is a dict for Pydantic
         token = create_token(user)
         user_response = UserResponse(
             id=user['id'],
