@@ -433,12 +433,21 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
 async def login(login_data: UserLogin, database = Depends(get_database)):
     try:
         user = await database.users.find_one({"email": login_data.email})
-        if not user or not verify_password(login_data.password, user['password_hash']):
+        if not user:
+            logger.error(f"Login failed: no user found for email={login_data.email}")
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        # Update last login
+        if "password_hash" not in user:
+            logger.error(f"User {login_data.email} missing password_hash field")
+            raise HTTPException(status_code=500, detail="Corrupt user document")
+
+        if not verify_password(login_data.password, user["password_hash"]):
+            logger.error(f"Invalid password for {login_data.email}")
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        # update last_login
         await database.users.update_one(
-            {"id": user['id']},
+            {"id": user["id"]},
             {"$set": {"last_login": datetime.utcnow()}}
         )
 
@@ -453,12 +462,10 @@ async def login(login_data: UserLogin, database = Depends(get_database)):
             last_login=user.get('last_login')
         )
         return LoginResponse(token=token, user=user_response)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Login failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
+    except Exception as e:
+        logger.exception(f"Login failed for {login_data.email}: {e}")
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 class ResetAdminBody(BaseModel):
     email: Optional[str] = "admin@staderochelais.com"
     password: Optional[str] = "admin123"
@@ -2107,7 +2114,7 @@ app.include_router(api_router)
 async def initialize_data():
     logger.info("Startup: ENV=%s DB_NAME=%s", ENVIRONMENT, os.environ.get('DB_NAME'))
     # Check if admin user exists
-    admin_user = await database.users.find_one({"role": "admin"})
+    admin_user = await db.users.find_one({"role": "admin"})
     if not admin_user:
         # Create default admin user
         admin_password_hash = hash_password("admin123")  # Change this password!
@@ -2122,11 +2129,11 @@ async def initialize_data():
             "created_at": datetime.utcnow(),
             "last_login": None
         }
-        await database.users.insert_one(admin_user_data)
+        await db.users.insert_one(admin_user_data)
         logger.info("Admin user created: admin@staderochelais.com / admin123")
     
     # Check if coaches already exist
-    existing_coaches = await database.coaches.count_documents({})
+    existing_coaches = await db.coaches.count_documents({})
     if existing_coaches == 0:
         # Create default coaches
         default_coaches = [
@@ -2167,12 +2174,12 @@ async def initialize_data():
             }
         ]
         
-        await database.coaches.insert_many(default_coaches)
+        await db.coaches.insert_many(default_coaches)
         logger.info("Coaches initialisés avec succès")
     
     # Update theme names in existing sessions
     try:
-        await database.sessions.update_many(
+        await db.sessions.update_many(
             {"themes": {"$in": ["Écran et remise"]}},
             {"$set": {"themes.$": "Écran et lecture"}}
         )
