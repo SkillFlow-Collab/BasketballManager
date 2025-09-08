@@ -2,6 +2,14 @@ import React, { useState, useEffect, createContext, useContext } from "react";
 import "./App.css";
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import axios from "axios";
+// Axios global interceptor to always attach token if present
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 import EvaluationModal from "./EvaluationModal";
 import ReportsWithEvaluation from "./ReportsWithEvaluation";
 import AttendanceManager from "./AttendanceManager";
