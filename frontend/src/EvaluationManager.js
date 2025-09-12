@@ -7,7 +7,7 @@ const API = `${BACKEND_URL}/api`;
 // Constantes pour les évaluations
 const EVALUATION_THEMES = [
   {
-    name: 'ADRESSE',
+    name: 'DEXTÉRITÉ',
     aspects: [
       'Gestuelle et arc',
       'Équilibre',
