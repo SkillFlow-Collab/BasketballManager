@@ -71,7 +71,7 @@ const ENTRAINEURS = [
 // Constantes pour les évaluations
 const EVALUATION_THEMES = [
   {
-    name: 'DEXTÉRITÉ',
+    name: 'ADRESSE',
     aspects: [
       'Gestuelle et arc',
       'Équilibre',
