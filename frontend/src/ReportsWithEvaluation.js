@@ -356,7 +356,7 @@ const ReportsWithEvaluation = () => {
     const datasets = [];
     
     // Utiliser les vrais thèmes d'évaluation 
-    const REAL_EVALUATION_THEMES = ['DEXTÉRITÉ', 'AISANCE', 'PASSE', 'DEFENSE', 'REBOND', 'ATHLETE', 'TACTIQUE', 'COACHABILITE'];
+    const REAL_EVALUATION_THEMES = ['ADRESSE', 'AISANCE', 'PASSE', 'DEFENSE', 'REBOND', 'ATHLETE', 'TACTIQUE', 'COACHABILITE'];
     
     // Define colors for different types of data - avec plus de contraste
     const colors = {
