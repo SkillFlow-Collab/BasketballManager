@@ -232,9 +232,26 @@ class CoachReport(BaseModel):
     recent_sessions: List[Session]
 
 # Player Evaluation Models
+from typing import Optional, Union
+from pydantic import validator
+
 class EvaluationAspect(BaseModel):
     name: str
-    score: int  # 1-5 scale
+    score: Optional[Union[int, str]] = None  # Can be int or "non_note"
+
+    @validator("score")
+    def validate_score(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, str):
+            if v != "non_note":
+                raise ValueError("Invalid string value for score, expected 'non_note'")
+            return v
+        if isinstance(v, int):
+            if not 0 <= v <= 5:
+                raise ValueError("Score must be between 0 and 5")
+            return v
+        raise ValueError("Score must be int, 'non_note', or None")
 
 class EvaluationTheme(BaseModel):
     name: str
