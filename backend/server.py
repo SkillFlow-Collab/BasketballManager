@@ -715,24 +715,33 @@ async def create_evaluation(evaluation_data: EvaluationCreate, current_user: Use
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
     
-    # Calculate averages for each theme and overall
+    # Calculate averages for each theme and overall, ignoring "non noté" aspects
     themes_with_averages = []
     total_score = 0
     total_aspects = 0
-    
+
     for theme in evaluation_data.themes:
         if theme.aspects:
-            theme_total = sum(aspect.score for aspect in theme.aspects)
-            theme_average = theme_total / len(theme.aspects)
-            theme.average_score = round(theme_average, 2)
-            
-            total_score += theme_total
-            total_aspects += len(theme.aspects)
+            # Filter out non-noted aspects (None or string "non_note")
+            valid_aspects = [
+                aspect for aspect in theme.aspects
+                if aspect.score is not None and aspect.score != "non_note"
+            ]
+
+            if valid_aspects:
+                theme_total = sum(aspect.score for aspect in valid_aspects)
+                theme_average = theme_total / len(valid_aspects)
+                theme.average_score = round(theme_average, 2)
+
+                total_score += theme_total
+                total_aspects += len(valid_aspects)
+            else:
+                theme.average_score = 0
         else:
             theme.average_score = 0
-        
+
         themes_with_averages.append(theme)
-    
+
     overall_average = round(total_score / total_aspects, 2) if total_aspects > 0 else 0
     
     evaluation_type = evaluation_data.evaluation_type or "initial"

@@ -172,17 +172,19 @@ const EvaluationManager = () => {
       ...prev,
       [playerId]: {
         ...prev[playerId],
-        [aspect]: parseInt(score)
+        [aspect]: score === "non_note" ? "non_note" : parseInt(score)
       }
     }));
   };
 
   const calculateThemeAverage = (playerId) => {
     if (!evaluationData[playerId] || !selectedTheme) return 0;
-    
-    const scores = selectedTheme.aspects.map(aspect => evaluationData[playerId][aspect] || 0);
-    const sum = scores.reduce((a, b) => a + b, 0);
-    return (sum / scores.length).toFixed(1);
+    const rawScores = selectedTheme.aspects
+      .map(aspect => evaluationData[playerId]?.[aspect])
+      .filter(score => score !== "non_note" && score !== undefined && score !== null);
+    if (rawScores.length === 0) return "—";
+    const sum = rawScores.reduce((a, b) => a + b, 0);
+    return (sum / rawScores.length).toFixed(1);
   };
 
   const saveEvaluations = async () => {
@@ -442,12 +444,18 @@ const EvaluationManager = () => {
                         {selectedTheme.aspects.map((aspect) => (
                           <td key={aspect} className="p-4 text-center">
                             <select
-                              value={evaluationData[player.id]?.[aspect] || 3}
+                              value={evaluationData[player.id]?.[aspect] ?? ""}
                               onChange={(e) => handleScoreChange(player.id, aspect, e.target.value)}
                               className={`w-16 p-2 border-2 rounded-lg text-center font-medium ${
-                                getScoreColor(evaluationData[player.id]?.[aspect] || 3)
+                                getScoreColor(
+                                  evaluationData[player.id]?.[aspect] === "non_note" || evaluationData[player.id]?.[aspect] === undefined || evaluationData[player.id]?.[aspect] === null
+                                    ? 3
+                                    : evaluationData[player.id]?.[aspect]
+                                )
                               }`}
                             >
+                              <option value="">—</option>
+                              <option value="non_note">Non noté</option>
                               <option value={1}>1</option>
                               <option value={2}>2</option>
                               <option value={3}>3</option>
