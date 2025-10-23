@@ -534,8 +534,9 @@ const AttendanceManager = () => {
         {selectedSession && (
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">
+              <h3 className="text-xl font-bold text-gray-800 flex items-center">
                 Détails de la séance - {new Date(selectedSession.session_date).toLocaleDateString('fr-FR')}
+                <span className="ml-3 text-gray-500 text-sm">({sessionAttendances.length} joueurs)</span>
               </h3>
               <div className="flex space-x-2">
                 <button
@@ -656,9 +657,12 @@ const AttendanceManager = () => {
                           <button
                             key={status}
                             onClick={() => handleAttendanceChange(player.id, status)}
-                            className={`attendance-button p-3 rounded-lg text-sm font-medium transition-all transform hover:scale-105 ${
-                              currentStatus === status ? 'selected' : ''
+                            className={`attendance-button p-3 rounded-lg text-sm font-medium transition-all transform hover:scale-105 border-2 ${
+                              currentStatus === status
+                                ? ATTENDANCE_STATUS[status].color + ' scale-105 border-2 border-blue-500 shadow-md'
+                                : 'border-gray-200 bg-white hover:bg-gray-50'
                             }`}
+                            title={config.label}
                           >
                             <div className="text-center">
                               <div className="text-xl mb-1">{config.icon}</div>
