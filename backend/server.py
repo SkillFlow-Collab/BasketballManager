@@ -72,7 +72,12 @@ app = FastAPI()
 # --- CORS (vercel + local) ---
 from starlette.middleware.cors import CORSMiddleware
 
-ALLOWED_ORIGINS = [FRONTEND_URL, "http://localhost:3000"]
+ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    "http://localhost:3000",
+    "https://skillflow.fr",
+    "https://www.skillflow.fr",
+]
 
 app.add_middleware(
     CORSMiddleware,
