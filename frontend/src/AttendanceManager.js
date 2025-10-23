@@ -10,6 +10,7 @@ const ATTENDANCE_STATUS = {
   present: { icon: '✅', label: 'Présent', color: 'bg-green-100 text-green-800 border-green-300' },
   absent: { icon: '❌', label: 'Absent', color: 'bg-red-100 text-red-800 border-red-300' },
   injured: { icon: '⚠️', label: 'Blessé', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+  late: { icon: '⏰', label: 'Retard', color: 'bg-blue-100 text-blue-800 border-blue-300' },
   off: { icon: '🏖️', label: 'OFF', color: 'bg-blue-100 text-blue-800 border-blue-300' }
 };
 
@@ -323,6 +324,7 @@ const AttendanceManager = () => {
       present: sessionAttendances.filter(a => a.status === 'present').length,
       absent: sessionAttendances.filter(a => a.status === 'absent').length,
       injured: sessionAttendances.filter(a => a.status === 'injured').length,
+      late: sessionAttendances.filter(a => a.status === 'late').length,
       off: sessionAttendances.filter(a => a.status === 'off').length,
       total: sessionAttendances.length
     };
@@ -613,6 +615,11 @@ const AttendanceManager = () => {
                     <div className="text-2xl">⚠️</div>
                     <div className="text-lg font-bold text-yellow-800">{stats.injured}</div>
                     <div className="text-sm text-yellow-700">Blessés</div>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg text-center">
+                    <div className="text-2xl">⏰</div>
+                    <div className="text-lg font-bold text-green-800">{stats.late}</div>
+                    <div className="text-sm text-green-700">Retard</div>
                   </div>
                   <div className="bg-blue-50 p-4 rounded-lg text-center">
                     <div className="text-2xl">🏖️</div>
