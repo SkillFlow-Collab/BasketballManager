@@ -1479,11 +1479,13 @@ async def get_player_attendance_report(
         for item in recent_data
     ]
     
-    # Calculate percentages
-    if stats["total_sessions"] > 0:
-        stats["presence_rate"] = round((stats["present"] / stats["total_sessions"]) * 100, 1)
-        stats["absence_rate"] = round((stats["absent"] / stats["total_sessions"]) * 100, 1)
-        stats["injury_rate"] = round((stats["injured"] / stats["total_sessions"]) * 100, 1)
+    # Calculate percentages (exclude OFF from total_sessions)
+    effective_sessions = stats["total_sessions"] - stats["off"]
+
+    if effective_sessions > 0:
+        stats["presence_rate"] = round((stats["present"] / effective_sessions) * 100, 1)
+        stats["absence_rate"] = round((stats["absent"] / effective_sessions) * 100, 1)
+        stats["injury_rate"] = round((stats["injured"] / effective_sessions) * 100, 1)
     else:
         stats["presence_rate"] = 0
         stats["absence_rate"] = 0
