@@ -1335,7 +1335,7 @@ async def create_attendance(attendance_data: AttendanceCreate, current_user: Use
         return attendance_obj
 
 @api_router.get("/attendances/session/{session_id}")
-async def get_session_attendances(session_id: str, current_user: User = Depends(get_current_user)):
+async def get_session_attendances(session_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     attendances = await database.attendances.find({"collective_session_id": session_id}).to_list(100)
     
     # Get player info for each attendance
