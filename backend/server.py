@@ -17,7 +17,6 @@ from datetime import datetime, date, timedelta
 import jwt
 import bcrypt
 from bson import ObjectId
-from contextlib import asynccontextmanager
 
 
 ROOT_DIR = Path(__file__).parent
@@ -57,7 +56,6 @@ security = HTTPBearer(auto_error=False)
 
 # --- DB dependency (serverless-safe) ---
 # Un client Motor par requête pour éviter les erreurs d'event loop en serverless.
-@asynccontextmanager
 async def get_database():
     client_local = AsyncIOMotorClient(mongo_url)
     try:
