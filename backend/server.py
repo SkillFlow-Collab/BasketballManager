@@ -2127,88 +2127,97 @@ async def get_heatmap_data(current_user: User = Depends(get_current_user), days:
 app.include_router(api_router)
 
 # Startup event to initialize coaches, update themes and create admin user
+async def get_startup_database():
+    client_local = AsyncIOMotorClient(mongo_url)
+    return client_local, client_local[DB_NAME]
+
+
 @app.on_event("startup")
 async def initialize_data():
-    logger.info("Startup: ENV=%s DB_NAME=%s", ENVIRONMENT, os.environ.get('DB_NAME'))
-    # Check if admin user exists
-    async with get_database() as database:
-        admin_user = await database.users.find_one({"role": "admin"})
-    if not admin_user:
-        # Create default admin user
-        admin_password_hash = hash_password("admin123")  # Change this password!
-        admin_user_data = {
-            "id": str(uuid.uuid4()),
-            "email": "admin@staderochelais.com",
-            "password_hash": admin_password_hash,
-            "role": "admin",
-            "first_name": "Admin",
-            "last_name": "Stade Rochelais",
-            "must_change_password": False,  # Default admin doesn't need to change password
-            "created_at": datetime.utcnow(),
-            "last_login": None
-        }
-        await database.users.insert_one(admin_user_data)
-        logger.info("Admin user created: admin@staderochelais.com / admin123")
-    
-    # Check if coaches already exist
-    existing_coaches = await database.coaches.count_documents({})
-    if existing_coaches == 0:
-        # Create default coaches
-        default_coaches = [
-            {
-                "id": str(uuid.uuid4()),
-                "first_name": "Léo",
-                "last_name": "",
-                "photo": None,
-                "created_at": datetime.utcnow()
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "first_name": "J-E",
-                "last_name": "",
-                "photo": None,
-                "created_at": datetime.utcnow()
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "first_name": "David",
-                "last_name": "",
-                "photo": None,
-                "created_at": datetime.utcnow()
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "first_name": "Mike",
-                "last_name": "",
-                "photo": None,
-                "created_at": datetime.utcnow()
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "first_name": "Loan",
-                "last_name": "",
-                "photo": None,
-                "created_at": datetime.utcnow()
-            }
-        ]
-        
-        await database.coaches.insert_many(default_coaches)
-        logger.info("Coaches initialisés avec succès")
-    
-    # Update theme names in existing sessions
+    client_local, database = await get_startup_database()
     try:
-        await database.sessions.update_many(
-            {"themes": {"$in": ["Écran et remise"]}},
-            {"$set": {"themes.$": "Écran et lecture"}}
-        )
-        logger.info("Thèmes mis à jour avec succès")
-    except Exception as e:
-        logger.error(f"Erreur lors de la mise à jour des thèmes: {e}")
+        logger.info("Startup: ENV=%s DB_NAME=%s", ENVIRONMENT, os.environ.get("DB_NAME"))
+
+        # Check if admin user exists
+        admin_user = await database.users.find_one({"role": "admin"})
+        if not admin_user:
+            admin_password_hash = hash_password("admin123")
+            admin_user_data = {
+                "id": str(uuid.uuid4()),
+                "email": "admin@staderochelais.com",
+                "password_hash": admin_password_hash,
+                "role": "admin",
+                "first_name": "Admin",
+                "last_name": "Stade Rochelais",
+                "must_change_password": False,
+                "created_at": datetime.utcnow(),
+                "last_login": None,
+            }
+            await database.users.insert_one(admin_user_data)
+            logger.info("Admin user created: admin@staderochelais.com / admin123")
+
+        # Check if coaches already exist
+        existing_coaches = await database.coaches.count_documents({})
+        if existing_coaches == 0:
+            default_coaches = [
+                {
+                    "id": str(uuid.uuid4()),
+                    "first_name": "Léo",
+                    "last_name": "",
+                    "photo": None,
+                    "created_at": datetime.utcnow(),
+                },
+                {
+                    "id": str(uuid.uuid4()),
+                    "first_name": "J-E",
+                    "last_name": "",
+                    "photo": None,
+                    "created_at": datetime.utcnow(),
+                },
+                {
+                    "id": str(uuid.uuid4()),
+                    "first_name": "David",
+                    "last_name": "",
+                    "photo": None,
+                    "created_at": datetime.utcnow(),
+                },
+                {
+                    "id": str(uuid.uuid4()),
+                    "first_name": "Mike",
+                    "last_name": "",
+                    "photo": None,
+                    "created_at": datetime.utcnow(),
+                },
+                {
+                    "id": str(uuid.uuid4()),
+                    "first_name": "Loan",
+                    "last_name": "",
+                    "photo": None,
+                    "created_at": datetime.utcnow(),
+                },
+            ]
+
+            await database.coaches.insert_many(default_coaches)
+            logger.info("Coaches initialisés avec succès")
+
+        # Update theme names in existing sessions
+        try:
+            await database.sessions.update_many(
+                {"themes": {"$in": ["Écran et remise"]}},
+                {"$set": {"themes.$": "Écran et lecture"}}
+            )
+            logger.info("Thèmes mis à jour avec succès")
+        except Exception as e:
+            logger.error("Erreur lors de la mise à jour des thèmes: %s", e)
+
+    finally:
+        client_local.close()
+
 
 # CORS configuration
 ALLOWED_ORIGINS = [
-    "https://basketball-manager-msoh.vercel.app",  # frontend (production)
-    "http://localhost:3000",                       # frontend (local dev) 
+    "https://basketball-manager-msoh.vercel.app",
+    "http://localhost:3000",
 ]
 
 
@@ -2219,6 +2228,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    logger.info("Shutdown complete")
