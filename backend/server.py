@@ -77,12 +77,13 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://skillflow.fr",
     "https://www.skillflow.fr",
+    "https://basketball-manager-kappa.vercel.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_origin_regex=r"^https://(.*\.)?vercel\.app$|^https://(.*\.)?skillflow\.fr$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
