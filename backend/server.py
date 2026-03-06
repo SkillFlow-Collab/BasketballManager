@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
-from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -39,47 +39,20 @@ ADMIN_RESET_TOKEN = os.environ.get('ADMIN_RESET_TOKEN')  # à définir dans Verc
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://basketball-manager-msoh.vercel.app')
 
 # MongoDB connection
-mongo_url = os.environ.get('MONGO_URL')
-DB_NAME = os.environ.get('DB_NAME')
-
-def create_mongo_client():
-    try:
-        if not mongo_url:
-            raise RuntimeError("Missing required environment variable: MONGO_URL")
-
-        # Simpler configuration for Vercel serverless
-        return AsyncIOMotorClient(
-            mongo_url,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=5000,
-            maxPoolSize=1
-        )
-    except Exception as e:
-        logger.exception("Mongo client creation failed: %s", e)
-        raise
+mongo_url = os.environ['MONGO_URL']
+DB_NAME = os.environ['DB_NAME']
 
 # DB ping helper for health endpoint
 async def db_ping():
+    client_local = AsyncIOMotorClient(mongo_url)
     try:
-        if not mongo_url or not DB_NAME:
-            return False, "Missing required environment variables: MONGO_URL or DB_NAME"
-
-        client_local = create_mongo_client()
-
-        # Try a simple ping
-        await client_local.admin.command("ping")
-
+        await client_local[DB_NAME].command("ping")
         return True, "ok"
-
     except Exception as e:
         logger.exception("DB ping failed: %s", e)
         return False, str(e)
-
     finally:
-        try:
-            client_local.close()
-        except Exception:
-            pass
+        client_local.close()
 
 # Security
 security = HTTPBearer(auto_error=False)
@@ -87,34 +60,35 @@ security = HTTPBearer(auto_error=False)
 # --- DB dependency (serverless-safe) ---
 # Un client Motor par requête pour éviter les erreurs d'event loop en serverless.
 async def get_database():
-    if not mongo_url or not DB_NAME:
-        raise HTTPException(status_code=500, detail="Server misconfigured: missing MONGO_URL or DB_NAME")
-
-    client_local = create_mongo_client()
+    client_local = AsyncIOMotorClient(mongo_url)
     try:
         yield client_local[DB_NAME]
     finally:
         client_local.close()
 
-
 # Create the main app without a prefix
 app = FastAPI()
 
-# Basic CORS configuration to allow frontend access
+# --- CORS (vercel + local) ---
+from starlette.middleware.cors import CORSMiddleware
+
+ALLOWED_ORIGINS = [
+    FRONTEND_URL,
+    "http://localhost:3000",
+    "https://skillflow.fr",
+    "https://www.skillflow.fr",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://www.skillflow.fr",
-        "https://skillflow.fr",
-        "https://basketball-manager-kappa.vercel.app",
-        "https://basketball-manager-msoh.vercel.app",
-        "http://localhost:3000",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True,
+    expose_headers=["*"],
+    max_age=86400,
 )
-
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -132,6 +106,10 @@ async def health_db():
         return {"db": "ok"}
     raise HTTPException(status_code=500, detail=f"DB error: {msg}")
 
+# Preflight handler for CORS OPTIONS requests
+@app.options("/{rest_of_path:path}")
+async def preflight(rest_of_path: str):
+    return JSONResponse(content={"ok": True})
 
 # Define Models
 class User(BaseModel):
@@ -448,10 +426,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if not credentials or not credentials.scheme or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    if not mongo_url or not DB_NAME:
-        raise HTTPException(status_code=500, detail="Server misconfigured: missing MONGO_URL or DB_NAME")
-
-    client_local = create_mongo_client()
+    client_local = AsyncIOMotorClient(mongo_url)
     database = client_local[DB_NAME]
     try:
         payload = decode_token(credentials.credentials)
@@ -465,7 +440,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except Exception as e:
         logger.exception("get_current_user error: %s", e)
         # Évite un 500 plateforme (souvent sans headers CORS)
-        raise HTTPException(status_code=500, detail=f"Auth check failed: {str(e)}")
+        raise HTTPException(status_code=401, detail="Auth check failed")
     finally:
         client_local.close()
 
@@ -1361,11 +1336,7 @@ async def create_attendance(attendance_data: AttendanceCreate, current_user: Use
         return attendance_obj
 
 @api_router.get("/attendances/session/{session_id}")
-async def get_session_attendances(
-    session_id: str,
-    current_user: User = Depends(get_current_user),
-    database = Depends(get_database)
-):
+async def get_session_attendances(session_id: str, current_user: User = Depends(get_current_user)):
     attendances = await database.attendances.find({"collective_session_id": session_id}).to_list(100)
     
     # Get player info for each attendance
