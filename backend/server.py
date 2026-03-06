@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -39,14 +39,29 @@ ADMIN_RESET_TOKEN = os.environ.get('ADMIN_RESET_TOKEN')  # à définir dans Verc
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://basketball-manager-msoh.vercel.app')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-DB_NAME = os.environ['DB_NAME']
+mongo_url = os.environ.get('MONGO_URL')
+DB_NAME = os.environ.get('DB_NAME')
+
+def create_mongo_client():
+    if not mongo_url:
+        raise RuntimeError("Missing required environment variable: MONGO_URL")
+    return AsyncIOMotorClient(
+        mongo_url,
+        serverSelectionTimeoutMS=5000,
+        connectTimeoutMS=5000,
+        socketTimeoutMS=5000,
+        maxPoolSize=1,
+        tls=True,
+    )
 
 # DB ping helper for health endpoint
 async def db_ping():
-    client_local = AsyncIOMotorClient(mongo_url)
+    if not mongo_url or not DB_NAME:
+        return False, "Missing required environment variables: MONGO_URL or DB_NAME"
+
+    client_local = create_mongo_client()
     try:
-        await client_local[DB_NAME].command("ping")
+        await client_local.admin.command("ping")
         return True, "ok"
     except Exception as e:
         logger.exception("DB ping failed: %s", e)
@@ -60,7 +75,10 @@ security = HTTPBearer(auto_error=False)
 # --- DB dependency (serverless-safe) ---
 # Un client Motor par requête pour éviter les erreurs d'event loop en serverless.
 async def get_database():
-    client_local = AsyncIOMotorClient(mongo_url)
+    if not mongo_url or not DB_NAME:
+        raise HTTPException(status_code=500, detail="Server misconfigured: missing MONGO_URL or DB_NAME")
+
+    client_local = create_mongo_client()
     try:
         yield client_local[DB_NAME]
     finally:
@@ -73,10 +91,16 @@ app = FastAPI()
 # Basic CORS configuration to allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "https://www.skillflow.fr",
+        "https://skillflow.fr",
+        "https://basketball-manager-kappa.vercel.app",
+        "https://basketball-manager-msoh.vercel.app",
+        "http://localhost:3000",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 
@@ -412,7 +436,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if not credentials or not credentials.scheme or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    client_local = AsyncIOMotorClient(mongo_url)
+    if not mongo_url or not DB_NAME:
+        raise HTTPException(status_code=500, detail="Server misconfigured: missing MONGO_URL or DB_NAME")
+
+    client_local = create_mongo_client()
     database = client_local[DB_NAME]
     try:
         payload = decode_token(credentials.credentials)
@@ -426,7 +453,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except Exception as e:
         logger.exception("get_current_user error: %s", e)
         # Évite un 500 plateforme (souvent sans headers CORS)
-        raise HTTPException(status_code=401, detail="Auth check failed")
+        raise HTTPException(status_code=500, detail=f"Auth check failed: {str(e)}")
     finally:
         client_local.close()
 
@@ -1322,7 +1349,11 @@ async def create_attendance(attendance_data: AttendanceCreate, current_user: Use
         return attendance_obj
 
 @api_router.get("/attendances/session/{session_id}")
-async def get_session_attendances(session_id: str, current_user: User = Depends(get_current_user)):
+async def get_session_attendances(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    database = Depends(get_database)
+):
     attendances = await database.attendances.find({"collective_session_id": session_id}).to_list(100)
     
     # Get player info for each attendance
