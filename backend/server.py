@@ -164,7 +164,7 @@ class Player(BaseModel):
     position: str
     team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
-    photo: Optional[str] = None  # Base64 encoded photo
+    photo: Optional[str] = None  
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class PlayerCreate(BaseModel):
