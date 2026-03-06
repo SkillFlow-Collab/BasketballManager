@@ -10,7 +10,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 from pathlib import Path
 from pydantic import BaseModel, Field
-from pydantic.json import ENCODERS_BY_TYPE
 from typing import List, Optional
 from enum import Enum
 import uuid
@@ -19,8 +18,6 @@ import jwt
 import bcrypt
 from bson import ObjectId
 
-# Add ObjectId encoder for JSON serialization
-ENCODERS_BY_TYPE[ObjectId] = str
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
