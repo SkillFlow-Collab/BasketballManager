@@ -2210,7 +2210,7 @@ async def initialize_data():
 # CORS configuration
 ALLOWED_ORIGINS = [
     "https://basketball-manager-msoh.vercel.app",  # frontend (production)
-    "http://localhost:3000",                       # frontend (local dev)
+    "http://localhost:3000",                       # frontend (local dev) 
 ]
 
 
