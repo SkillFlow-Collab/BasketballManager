@@ -144,9 +144,15 @@ class LoginResponse(BaseModel):
     token: str
     user: UserResponse
 
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+# TeamType enum for player and match models
+class TeamType(str, Enum):
+    U18 = "U18"
+    U21 = "U21"
 
 class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -154,6 +160,7 @@ class Player(BaseModel):
     last_name: str
     date_of_birth: date
     position: str
+    team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
     photo: Optional[str] = None  # Base64 encoded photo
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -163,6 +170,7 @@ class PlayerCreate(BaseModel):
     last_name: str
     date_of_birth: date
     position: str
+    team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
     photo: Optional[str] = None
 
@@ -171,6 +179,7 @@ class PlayerUpdate(BaseModel):
     last_name: Optional[str] = None
     date_of_birth: Optional[date] = None
     position: Optional[str] = None
+    team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
     photo: Optional[str] = None
 
@@ -325,9 +334,6 @@ class AttendanceUpdate(BaseModel):
     notes: Optional[str] = None
 
 # Match Models
-class TeamType(str, Enum):
-    U18 = "U18"
-    U21 = "U21"
 
 class Match(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -650,14 +656,14 @@ async def create_player(player_data: PlayerCreate, current_user: User = Depends(
 @api_router.get("/players", response_model=List[Player])
 async def get_players(current_user: User = Depends(get_current_user), database = Depends(get_database)):
     players = await database.players.find().to_list(1000)
-    return [Player(**player) for player in players]
+    return [Player(**{k: v for k, v in player.items() if k != "_id"}) for player in players]
 
 @api_router.get("/players/{player_id}", response_model=Player)
 async def get_player(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     player = await database.players.find_one({"id": player_id})
     if not player:
         raise HTTPException(status_code=404, detail="Player not found")
-    return Player(**player)
+    return Player(**{k: v for k, v in player.items() if k != "_id"})
 
 @api_router.put("/players/{player_id}", response_model=Player)
 async def update_player(player_id: str, player_data: PlayerUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
@@ -674,7 +680,7 @@ async def update_player(player_id: str, player_data: PlayerUpdate, current_user:
         raise HTTPException(status_code=404, detail="Player not found")
     
     updated_player = await database.players.find_one({"id": player_id})
-    return Player(**updated_player)
+    return Player(**{k: v for k, v in updated_player.items() if k != "_id"})
 
 @api_router.delete("/players/{player_id}")
 async def delete_player(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
@@ -1260,7 +1266,7 @@ async def get_match_participations(match_id: str, current_user: User = Depends(g
         if player:
             result.append({
                 "participation": MatchParticipation(**participation),
-                "player": Player(**player)
+                "player": Player(**{k: v for k, v in player.items() if k != "_id"})
             })
     
     return result
@@ -1489,7 +1495,7 @@ async def get_player_attendance_report(
         stats["injury_rate"] = 0
     
     return {
-        "player": player,
+        "player": {k: v for k, v in player.items() if k != "_id"},
         "statistics": stats
     }
 
@@ -1740,7 +1746,7 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
     )[:5]
     
     return PlayerReport(
-        player=Player(**player),
+        player=Player(**{k: v for k, v in player.items() if k != "_id"}),
         total_sessions=total_sessions,
         content_breakdown=content_breakdown,
         trainer_breakdown=trainer_breakdown,

@@ -1249,6 +1249,7 @@ const Players = React.memo(() => {
     last_name: '',
     date_of_birth: '',
     position: '',
+    team: '',
     coach_referent: '',
     photo: ''
   });
@@ -1354,6 +1355,8 @@ const Players = React.memo(() => {
         last_name: '',
         date_of_birth: '',
         position: '',
+        team: '',
+        coach_referent: '',
         photo: ''
       });
       fetchPlayers();
@@ -1390,6 +1393,7 @@ const Players = React.memo(() => {
       last_name: player.last_name,
       date_of_birth: player.date_of_birth,
       position: player.position,
+      team: player.team || '',
       coach_referent: player.coach_referent || '',
       photo: player.photo || ''
     });
@@ -1747,6 +1751,11 @@ const Players = React.memo(() => {
                     {player.first_name} {player.last_name}
                   </h3>
                   <p className="text-gray-600 text-center">{player.position}</p>
+                  {player.team && (
+                    <p className="text-yellow-600 text-center text-sm font-medium">
+                      Équipe : {player.team}
+                    </p>
+                  )}
                   {player.coach_referent && (
                     <p className="text-blue-600 text-center text-sm font-medium">
                       Coach: {player.coach_referent}
@@ -1873,6 +1882,15 @@ const Players = React.memo(() => {
                 <option value="Pivot">Pivot</option>
               </select>
               <select
+                value={playerFormData.team}
+                onChange={(e) => setPlayerFormData({ ...playerFormData, team: e.target.value })}
+                className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Sélectionner une équipe (optionnel)</option>
+                <option value="U18">U18</option>
+                <option value="U21">U21</option>
+              </select>
+              <select
                 value={playerFormData.coach_referent}
                 onChange={(e) => setPlayerFormData({ ...playerFormData, coach_referent: e.target.value })}
                 className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1909,6 +1927,7 @@ const Players = React.memo(() => {
                       last_name: '',
                       date_of_birth: '',
                       position: '',
+                      team: '',
                       coach_referent: '',
                       photo: ''
                     });

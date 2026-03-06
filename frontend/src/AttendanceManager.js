@@ -48,13 +48,9 @@ const AttendanceManager = () => {
   // Initialize default attendances when players are loaded and we're creating a new session
   useEffect(() => {
     if (!editingSession && showSessionForm && players.length > 0) {
-      const defaultAttendances = {};
-      players.forEach(player => {
-        defaultAttendances[player.id] = 'present';
-      });
-      setNewSessionAttendances(defaultAttendances);
+      setNewSessionAttendances(buildDefaultAttendances(sessionFormData.session_type));
     }
-  }, [players, showSessionForm, editingSession]);
+  }, [players, showSessionForm, editingSession, sessionFormData.session_type]);
 
   const fetchPlayers = async () => {
     try {
@@ -214,6 +210,23 @@ const AttendanceManager = () => {
     return newSessionAttendances[playerId] || 'present'; // Default to present
   };
 
+  const isTeamSessionType = (sessionType) => {
+    return players.some(player => player.team === sessionType);
+  };
+
+  const buildDefaultAttendances = (sessionType) => {
+    const defaultAttendances = {};
+    const teamSession = isTeamSessionType(sessionType);
+
+    players.forEach(player => {
+      defaultAttendances[player.id] = teamSession
+        ? (player.team === sessionType ? 'present' : 'absent')
+        : 'present';
+    });
+
+    return defaultAttendances;
+  };
+
   const getSessionTypeColor = (type) => {
     const colors = {
       'U18': 'bg-blue-500 border-blue-600',
@@ -253,12 +266,8 @@ const AttendanceManager = () => {
     setShowSessionForm(true);
     setSelectedSession(null);
     setSessionAttendances([]);
-    // Reset attendance to all present for new session
-    const defaultAttendances = {};
-    players.forEach(player => {
-      defaultAttendances[player.id] = 'present';
-    });
-    setNewSessionAttendances(defaultAttendances);
+    // Reset attendance for new session based on session type and player team
+    setNewSessionAttendances(buildDefaultAttendances(sessionFormData.session_type));
   };
 
   const selectSession = (session, event) => {
@@ -704,7 +713,14 @@ const AttendanceManager = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Type de séance</label>
                   <select
                     value={sessionFormData.session_type}
-                    onChange={(e) => setSessionFormData({...sessionFormData, session_type: e.target.value})}
+                    onChange={(e) => {
+                      const nextSessionType = e.target.value;
+                      setSessionFormData({...sessionFormData, session_type: nextSessionType});
+
+                      if (!editingSession) {
+                        setNewSessionAttendances(buildDefaultAttendances(nextSessionType));
+                      }
+                    }}
                     className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                   >
@@ -774,7 +790,7 @@ const AttendanceManager = () => {
               <div className="border-t pt-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Marquer les présences directement</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Tous les joueurs sont marqués présents par défaut. Modifiez le statut si nécessaire :
+                  Les présences par défaut s’adaptent automatiquement au type de séance. Modifiez le statut si nécessaire :
                 </p>
                 
                 {/* Quick Legend */}
@@ -803,6 +819,9 @@ const AttendanceManager = () => {
                             <div>
                               <span className="font-medium text-sm">{player.first_name} {player.last_name}</span>
                               <p className="text-xs text-gray-500">{player.position}</p>
+                              {player.team && (
+                                <p className="text-xs text-blue-600 font-medium">{player.team}</p>
+                              )}
                             </div>
                           </div>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${ATTENDANCE_STATUS[currentStatus].color}`}>
