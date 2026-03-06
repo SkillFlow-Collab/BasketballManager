@@ -1889,6 +1889,7 @@ const Players = React.memo(() => {
                 <option value="">Sélectionner une équipe (optionnel)</option>
                 <option value="U18">U18</option>
                 <option value="U21">U21</option>
+                <option value="Pro">Pro</option>
               </select>
               <select
                 value={playerFormData.coach_referent}
