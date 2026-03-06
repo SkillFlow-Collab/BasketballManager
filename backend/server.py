@@ -153,6 +153,7 @@ class ChangePasswordRequest(BaseModel):
 class TeamType(str, Enum):
     U18 = "U18"
     U21 = "U21"
+    Pro = "Pro"
 
 class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
