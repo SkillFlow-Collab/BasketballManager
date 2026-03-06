@@ -66,29 +66,19 @@ async def get_database():
     finally:
         client_local.close()
 
+
 # Create the main app without a prefix
 app = FastAPI()
 
-# --- CORS (vercel + local) ---
-from starlette.middleware.cors import CORSMiddleware
-
-ALLOWED_ORIGINS = [
-    FRONTEND_URL,
-    "http://localhost:3000",
-    "https://skillflow.fr",
-    "https://www.skillflow.fr",
-]
-
+# Basic CORS configuration to allow frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=86400,
 )
+
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -106,10 +96,6 @@ async def health_db():
         return {"db": "ok"}
     raise HTTPException(status_code=500, detail=f"DB error: {msg}")
 
-# Preflight handler for CORS OPTIONS requests
-@app.options("/{rest_of_path:path}")
-async def preflight(rest_of_path: str):
-    return JSONResponse(content={"ok": True})
 
 # Define Models
 class User(BaseModel):
