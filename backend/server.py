@@ -43,31 +43,43 @@ mongo_url = os.environ.get('MONGO_URL')
 DB_NAME = os.environ.get('DB_NAME')
 
 def create_mongo_client():
-    if not mongo_url:
-        raise RuntimeError("Missing required environment variable: MONGO_URL")
-    return AsyncIOMotorClient(
-        mongo_url,
-        serverSelectionTimeoutMS=5000,
-        connectTimeoutMS=5000,
-        socketTimeoutMS=5000,
-        maxPoolSize=1,
-        tls=True,
-    )
+    try:
+        if not mongo_url:
+            raise RuntimeError("Missing required environment variable: MONGO_URL")
+
+        # Simpler configuration for Vercel serverless
+        return AsyncIOMotorClient(
+            mongo_url,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            maxPoolSize=1
+        )
+    except Exception as e:
+        logger.exception("Mongo client creation failed: %s", e)
+        raise
 
 # DB ping helper for health endpoint
 async def db_ping():
-    if not mongo_url or not DB_NAME:
-        return False, "Missing required environment variables: MONGO_URL or DB_NAME"
-
-    client_local = create_mongo_client()
     try:
+        if not mongo_url or not DB_NAME:
+            return False, "Missing required environment variables: MONGO_URL or DB_NAME"
+
+        client_local = create_mongo_client()
+
+        # Try a simple ping
         await client_local.admin.command("ping")
+
         return True, "ok"
+
     except Exception as e:
         logger.exception("DB ping failed: %s", e)
         return False, str(e)
+
     finally:
-        client_local.close()
+        try:
+            client_local.close()
+        except Exception:
+            pass
 
 # Security
 security = HTTPBearer(auto_error=False)
