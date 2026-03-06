@@ -2131,7 +2131,8 @@ app.include_router(api_router)
 async def initialize_data():
     logger.info("Startup: ENV=%s DB_NAME=%s", ENVIRONMENT, os.environ.get('DB_NAME'))
     # Check if admin user exists
-    admin_user = await database.users.find_one({"role": "admin"})
+    async with get_database() as database:
+        admin_user = await database.users.find_one({"role": "admin"})
     if not admin_user:
         # Create default admin user
         admin_password_hash = hash_password("admin123")  # Change this password!
