@@ -77,13 +77,12 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://skillflow.fr",
     "https://www.skillflow.fr",
-    "https://basketball-manager-kappa.vercel.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"^https://(.*\.)?vercel\.app$|^https://(.*\.)?skillflow\.fr$",
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -113,11 +112,6 @@ async def preflight(rest_of_path: str):
     return JSONResponse(content={"ok": True})
 
 # Define Models
-
-# TeamType enum for use in Player and Match models
-class TeamType(str, Enum):
-    U18 = "U18"
-    U21 = "U21"
 class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     email: str
@@ -163,9 +157,8 @@ class Player(BaseModel):
     last_name: str
     date_of_birth: date
     position: str
-    team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
-    photo: Optional[str] = None  
+    photo: Optional[str] = None  # Base64 encoded photo
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class PlayerCreate(BaseModel):
@@ -173,7 +166,6 @@ class PlayerCreate(BaseModel):
     last_name: str
     date_of_birth: date
     position: str
-    team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
     photo: Optional[str] = None
 
@@ -182,7 +174,6 @@ class PlayerUpdate(BaseModel):
     last_name: Optional[str] = None
     date_of_birth: Optional[date] = None
     position: Optional[str] = None
-    team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
     photo: Optional[str] = None
 
