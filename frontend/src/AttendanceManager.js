@@ -4,7 +4,7 @@ import axios from 'axios';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const SESSION_TYPES = ['U18', 'U21', 'CDF', 'Musculation'];
+const SESSION_TYPES = ['U18', 'U21', 'Pro' , 'CDF', 'Musculation'];
 
 const ATTENDANCE_STATUS = {
   present: { icon: '✅', label: 'Présent', color: 'bg-green-100 text-green-800 border-green-300' },
@@ -230,7 +230,8 @@ const AttendanceManager = () => {
   const getSessionTypeColor = (type) => {
     const colors = {
       'U18': 'bg-blue-500 border-blue-600',
-      'U21': 'bg-green-500 border-green-600', 
+      'U21': 'bg-green-500 border-green-600',
+      'Pro': 'bg-green-500 border-yellow-600', 
       'CDF': 'bg-purple-500 border-purple-600',
       'Musculation': 'bg-orange-500 border-orange-600'
     };
