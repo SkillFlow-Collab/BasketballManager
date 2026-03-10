@@ -220,7 +220,7 @@ const AttendanceManager = () => {
 
     players.forEach(player => {
       defaultAttendances[player.id] = teamSession
-        ? (player.team === sessionType ? 'present' : 'absent')
+        ? (player.team === sessionType ? 'present' : 'OFF')
         : 'present';
     });
 
