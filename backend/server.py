@@ -405,6 +405,9 @@ class MatchParticipationBatchUpdate(BaseModel):
     id: str
     play_time: Optional[int] = None
 
+class MatchParticipationBatchRequest(BaseModel):
+    updates: List[MatchParticipationBatchUpdate]
+
 # Authentication functions
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -1315,13 +1318,13 @@ async def update_match_participation(participation_id: str, participation_data: 
 
 @api_router.put("/match-participations/batch")
 async def batch_update_match_participations(
-    updates: List[MatchParticipationBatchUpdate],
+    body: MatchParticipationBatchRequest,
     current_user: User = Depends(get_current_user),
     database = Depends(get_database)
 ):
     updated_ids = []
 
-    for update in updates:
+    for update in body.updates:
         update_data = {}
 
         if update.play_time is not None:
