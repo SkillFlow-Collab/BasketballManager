@@ -145,7 +145,7 @@ const MatchManager = () => {
   
       Object.entries(playTimeInputs).forEach(([playerId, playTime]) => {
         const participation = matchParticipations.find(
-          mp => mp.player.id === playerId
+          mp => String(mp.player.id) === String(playerId)
         );
   
         if (participation && playTime !== '' && playTime !== null) {
