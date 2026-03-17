@@ -401,6 +401,10 @@ class MatchParticipationUpdate(BaseModel):
     play_time: Optional[int] = None
     notes: Optional[str] = None
 
+class MatchParticipationBatchUpdate(BaseModel):
+    id: str
+    play_time: Optional[int] = None
+
 # Authentication functions
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -1308,6 +1312,36 @@ async def update_match_participation(participation_id: str, participation_data: 
     # Return updated participation
     updated_participation = await database.match_participations.find_one({"id": participation_id})
     return MatchParticipation(**updated_participation)
+
+@api_router.put("/match-participations/batch")
+async def batch_update_match_participations(
+    updates: List[MatchParticipationBatchUpdate],
+    current_user: User = Depends(get_current_user),
+    database = Depends(get_database)
+):
+    updated_ids = []
+
+    for update in updates:
+        update_data = {}
+
+        if update.play_time is not None:
+            update_data["play_time"] = update.play_time
+
+        if not update_data:
+            continue
+
+        result = await database.match_participations.update_one(
+            {"id": update.id},
+            {"$set": update_data}
+        )
+
+        if result.matched_count > 0:
+            updated_ids.append(update.id)
+
+    return {
+        "updated": len(updated_ids),
+        "ids": updated_ids
+    }
 
 @api_router.delete("/match-participations/{participation_id}")
 async def delete_match_participation(participation_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):

@@ -44,22 +44,7 @@ const MatchManager = () => {
     fetchMatches();
   }, [selectedMonth, selectedYear]);
 
-  // Debounce play time updates
-  useEffect(() => {
-    const timeouts = {};
-    
-    Object.keys(playTimeInputs).forEach(playerId => {
-      timeouts[playerId] = setTimeout(() => {
-        if (selectedMatch && playTimeInputs[playerId] !== undefined) {
-          handleParticipationChange(playerId, 'play_time', playTimeInputs[playerId]);
-        }
-      }, 1000); // 1 second debounce
-    });
 
-    return () => {
-      Object.values(timeouts).forEach(timeout => clearTimeout(timeout));
-    };
-  }, [playTimeInputs, selectedMatch]);
 
   const fetchPlayers = async () => {
     try {
@@ -149,6 +134,41 @@ const MatchManager = () => {
       showMessage('❌ Erreur lors de la sauvegarde du match');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateAllPlayTimes = async () => {
+    if (!selectedMatch) return;
+  
+    try {
+      const updates = [];
+  
+      Object.entries(playTimeInputs).forEach(([playerId, playTime]) => {
+        const participation = matchParticipations.find(
+          mp => mp.player.id === playerId
+        );
+  
+        if (participation && playTime !== '') {
+          updates.push({
+            id: participation.participation.id,
+            play_time: playTime
+          });
+        }
+      });
+  
+      if (updates.length === 0) {
+        showMessage("⚠️ Aucun temps de jeu à mettre à jour");
+        return;
+      }
+  
+      await axios.put(`${API}/match-participations/batch`, updates);
+  
+      showMessage("✅ Temps de jeu mis à jour !");
+      fetchMatchParticipations(selectedMatch.id);
+  
+    } catch (error) {
+      console.error("Erreur batch update:", error);
+      showMessage("❌ Erreur lors de la mise à jour des temps de jeu");
     }
   };
 
@@ -359,118 +379,134 @@ const MatchManager = () => {
         )}
       </div>
 
-      {/* Match Details and Participations */}
-      {selectedMatch && (
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-gray-800">
-              Participations - {selectedMatch.team} vs {selectedMatch.opponent}
-            </h3>
-            <button
-              onClick={() => {
-                setSelectedMatch(null);
-                setPlayTimeInputs({}); // Reset play time inputs
-              }}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              ✕ Fermer
-            </button>
+{/* Match Details and Participations */}
+{selectedMatch && (
+  <div className="bg-white rounded-xl shadow-lg p-6">
+    <div className="flex items-center justify-between mb-6">
+      <h3 className="text-xl font-bold text-gray-800">
+        Participations - {selectedMatch.team} vs {selectedMatch.opponent}
+      </h3>
+      <button
+        onClick={() => {
+          setSelectedMatch(null);
+          setPlayTimeInputs({});
+        }}
+        className="text-gray-500 hover:text-gray-700"
+      >
+        ✕ Fermer
+      </button>
+    </div>
+
+    <div className="space-y-4">
+      {players.map(player => {
+        const participation = matchParticipations.find(mp => mp.player.id === player.id);
+        const isPresent = participation?.participation.is_present || false;
+        const isStarter = participation?.participation.is_starter || false;
+
+        const playTime =
+          playTimeInputs[player.id] !== undefined
+            ? playTimeInputs[player.id]
+            : participation?.participation.play_time || '';
+
+        return (
+          <div
+            key={player.id}
+            className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="font-medium text-gray-800">
+                  {player.first_name} {player.last_name}
+                </div>
+                <div className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                  {player.position}
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-6">
+                {/* Présent */}
+                <button
+                  onClick={() =>
+                    handleParticipationChange(player.id, "is_present", !isPresent)
+                  }
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    isPresent
+                      ? "bg-green-500 text-white shadow-md"
+                      : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                  }`}
+                >
+                  {isPresent ? "✓ Présent" : "✗ Absent"}
+                </button>
+
+                {/* Titulaire */}
+                <button
+                  disabled={!isPresent}
+                  onClick={() => {
+                    if (isPresent) {
+                      handleParticipationChange(
+                        player.id,
+                        "is_starter",
+                        !isStarter
+                      );
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    !isPresent
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : isStarter
+                      ? "bg-purple-500 text-white shadow-md"
+                      : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                  }`}
+                >
+                  {isStarter ? "★ Titulaire" : "○ Remplaçant"}
+                </button>
+
+                {/* Temps de jeu */}
+                <div className="flex items-center">
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    placeholder="0"
+                    value={playTime}
+                    disabled={!isPresent}
+                    onChange={(e) => {
+                      const value =
+                        e.target.value === ""
+                          ? ""
+                          : parseInt(e.target.value) || 0;
+
+                      setPlayTimeInputs((prev) => ({
+                        ...prev,
+                        [player.id]: value,
+                      }));
+                    }}
+                    className={`w-16 h-10 p-2 border rounded-lg text-center font-medium ${
+                      !isPresent
+                        ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                        : "bg-white border-gray-300 text-gray-800 hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                    }`}
+                  />
+                  <span className="ml-2 text-sm text-gray-500">min</span>
+                </div>
+              </div>
+            </div>
           </div>
+        );
+      })}
+    </div>
 
-          <div className="space-y-4">
-            {players
-              .filter(player => {
-                // Filter players based on match team (you might want to add a team field to players)
-                return true; // For now, show all players
-              })
-              .map(player => {
-                const participation = matchParticipations.find(mp => mp.player.id === player.id);
-                const isPresent = participation?.participation.is_present || false;
-                const isStarter = participation?.participation.is_starter || false;
-                const playTime = playTimeInputs[player.id] !== undefined ? playTimeInputs[player.id] : (participation?.participation.play_time || '');
-
-                return (
-                  <div key={player.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="font-medium text-gray-800">
-                          {player.first_name} {player.last_name}
-                        </div>
-                        <div className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                          {player.position}
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-6">
-                        {/* Présent - Simple Toggle Button */}
-                        <div className="flex flex-col items-center space-y-1">
-                          <button
-                            onClick={() => handleParticipationChange(player.id, 'is_present', !isPresent)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                              isPresent 
-                                ? 'bg-green-500 text-white shadow-md' 
-                                : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                            }`}
-                          >
-                            {isPresent ? '✓ Présent' : '✗ Absent'}
-                          </button>
-                        </div>
-
-                        {/* 5 de départ - Simple Toggle Button */}
-                        <div className="flex flex-col items-center space-y-1">
-                          <button
-                            disabled={!isPresent}
-                            onClick={() => {
-                              if (isPresent) {
-                                handleParticipationChange(player.id, 'is_starter', !isStarter);
-                              }
-                            }}
-                            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                              !isPresent 
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                                : isStarter 
-                                  ? 'bg-purple-500 text-white shadow-md' 
-                                  : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                            }`}
-                          >
-                            {isStarter ? '★ Titulaire' : '○ Remplaçant'}
-                          </button>
-                        </div>
-
-                        {/* Temps de jeu */}
-                        <div className="flex flex-col items-center space-y-1">
-                          <div className="flex items-center">
-                            <input
-                              type="number"
-                              min="0"
-                              max="60"
-                              placeholder="0"
-                              value={playTime}
-                              disabled={!isPresent}
-                              onChange={(e) => {
-                                const value = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                                setPlayTimeInputs(prev => ({
-                                  ...prev,
-                                  [player.id]: value
-                                }));
-                              }}
-                              className={`w-16 h-10 p-2 border rounded-lg text-center font-medium ${
-                                !isPresent 
-                                  ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' 
-                                  : 'bg-white border-gray-300 text-gray-800 hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200'
-                              }`}
-                            />
-                            <span className="ml-2 text-sm text-gray-500">min</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
+    {/* BOUTON UPDATE */}
+    <div className="mt-6 flex justify-end">
+      <button
+        onClick={updateAllPlayTimes}
+        className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-medium transition-colors shadow-md"
+      >
+        💾 Mettre à jour les temps de jeu
+      </button>
+    </div>
+  </div>
+)}
 
       {/* Match Form Modal */}
       {showMatchForm && (
