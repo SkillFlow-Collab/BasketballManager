@@ -168,6 +168,7 @@ const MatchManager = () => {
   
     } catch (error) {
       console.error("Erreur batch update:", error);
+      console.error("Response backend:", error.response?.data);
       showMessage("❌ Erreur lors de la mise à jour des temps de jeu");
     }
   };
