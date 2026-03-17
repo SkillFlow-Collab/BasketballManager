@@ -161,9 +161,7 @@ const MatchManager = () => {
         return;
       }
   
-      await axios.put(`${API}/match-participations/batch`, {
-        updates: updates
-      });
+      await axios.put(`${API}/match-participations/batch`, updates);
   
       showMessage("✅ Temps de jeu mis à jour !");
       fetchMatchParticipations(selectedMatch.id);
