@@ -147,7 +147,7 @@ const MatchManager = () => {
         const participation = matchParticipations.find(
           mp => mp.player.id === playerId
         );
-      
+  
         if (participation && playTime !== '' && playTime !== null) {
           updates.push({
             id: participation.participation.id,
@@ -161,7 +161,9 @@ const MatchManager = () => {
         return;
       }
   
-      await axios.put(`${API}/match-participations/batch`, updates);
+      await axios.put(`${API}/match-participations/batch`, {
+        updates: updates
+      });
   
       showMessage("✅ Temps de jeu mis à jour !");
       fetchMatchParticipations(selectedMatch.id);
