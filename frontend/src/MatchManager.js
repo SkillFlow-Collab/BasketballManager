@@ -143,18 +143,23 @@ const MatchManager = () => {
     try {
       const updates = [];
   
-      Object.entries(playTimeInputs).forEach(([playerId, playTime]) => {
-        const participation = matchParticipations.find(
-          mp => String(mp.player.id) === String(playerId)
-        );
+      matchParticipations.forEach(mp => {
+        const playerId = mp.player.id;
   
-        if (participation && playTime !== '' && playTime !== null) {
+        const playTime =
+          playTimeInputs[playerId] !== undefined
+            ? playTimeInputs[playerId]
+            : mp.participation.play_time;
+  
+        if (playTime !== null && playTime !== '') {
           updates.push({
-            id: participation.participation.id,
+            id: mp.participation.id,
             play_time: Number(playTime)
           });
         }
       });
+  
+      console.log("Updates envoyés :", updates);
   
       if (updates.length === 0) {
         showMessage("⚠️ Aucun temps de jeu à mettre à jour");
