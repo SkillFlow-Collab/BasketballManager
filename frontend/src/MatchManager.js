@@ -147,11 +147,11 @@ const MatchManager = () => {
         const participation = matchParticipations.find(
           mp => mp.player.id === playerId
         );
-  
-        if (participation && playTime !== '') {
+      
+        if (participation && playTime !== '' && playTime !== null) {
           updates.push({
             id: participation.participation.id,
-            play_time: playTime
+            play_time: Number(playTime)
           });
         }
       });
