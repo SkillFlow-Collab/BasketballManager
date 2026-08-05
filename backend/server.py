@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import asyncio
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -39,29 +40,45 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://basketball-manager-msoh.v
 mongo_url = os.environ['MONGO_URL']
 DB_NAME = os.environ['DB_NAME']
 
+# --- Shared Mongo client (serverless-safe, reused across warm invocations) ---
+# On garde une seule connexion ouverte tant que l'instance serverless reste "chaude",
+# au lieu d'en recréer une nouvelle (coûteuse en latence) à chaque requête.
+# On la recrée uniquement si elle n'existe pas encore ou si la boucle asyncio a changé
+# (ce qui peut arriver entre deux invocations serverless froides).
+_mongo_client = None
+_mongo_client_loop = None
+
+def _get_mongo_client():
+    global _mongo_client, _mongo_client_loop
+    current_loop = asyncio.get_event_loop()
+    if _mongo_client is None or _mongo_client_loop is not current_loop:
+        _mongo_client = AsyncIOMotorClient(
+            mongo_url,
+            maxPoolSize=10,
+            minPoolSize=0,
+            serverSelectionTimeoutMS=8000,
+            connectTimeoutMS=8000,
+        )
+        _mongo_client_loop = current_loop
+    return _mongo_client
+
 # DB ping helper for health endpoint
 async def db_ping():
-    client_local = AsyncIOMotorClient(mongo_url)
     try:
+        client_local = _get_mongo_client()
         await client_local[DB_NAME].command("ping")
         return True, "ok"
     except Exception as e:
         logger.exception("DB ping failed: %s", e)
         return False, str(e)
-    finally:
-        client_local.close()
 
 # Security
 security = HTTPBearer(auto_error=False)
 
-# --- DB dependency (serverless-safe) ---
-# Un client Motor par requête pour éviter les erreurs d'event loop en serverless.
+# --- DB dependency (serverless-safe, connexion réutilisée) ---
 async def get_database():
-    client_local = AsyncIOMotorClient(mongo_url)
-    try:
-        yield client_local[DB_NAME]
-    finally:
-        client_local.close()
+    client_local = _get_mongo_client()
+    yield client_local[DB_NAME]
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -86,6 +103,11 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=86400,
 )
+
+# Compresse les réponses (utile notamment pour les photos encodées en base64
+# et les listes de séances/évaluations), ce qui réduit le temps de chargement.
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -454,8 +476,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if not credentials or not credentials.scheme or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    client_local = AsyncIOMotorClient(mongo_url)
-    database = client_local[DB_NAME]
+    database = _get_mongo_client()[DB_NAME]
     try:
         payload = decode_token(credentials.credentials)
         user = await database.users.find_one({"id": payload["user_id"]})
@@ -469,8 +490,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         logger.exception("get_current_user error: %s", e)
         # Évite un 500 plateforme (souvent sans headers CORS)
         raise HTTPException(status_code=401, detail="Auth check failed")
-    finally:
-        client_local.close()
 
 async def get_admin_user(current_user: User = Depends(get_current_user)):
     if current_user.role != 'admin':
@@ -1755,8 +1774,16 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
         match_stats["average_play_time"] = round(sum([p["play_time"] for p in played_matches]) / len(played_matches), 1)
     
     # Get match details for team breakdown and separate U18/U21 averages
+    # (une seule requête groupée au lieu d'une requête par match, pour aller plus vite)
+    match_ids = list({p["match_id"] for p in match_participations if p.get("match_id")})
+    matches_by_id = {}
+    if match_ids:
+        matches_cursor = database.matches.find({"id": {"$in": match_ids}})
+        async for m in matches_cursor:
+            matches_by_id[m["id"]] = m
+
     for participation in match_participations:
-        match = await database.matches.find_one({"id": participation["match_id"]})
+        match = matches_by_id.get(participation["match_id"])
         if match:
             # Team breakdown
             team = match["team"]
@@ -2188,16 +2215,36 @@ async def get_heatmap_data(current_user: User = Depends(get_current_user), days:
 app.include_router(api_router)
 
 # Startup event to initialize coaches, update themes and create admin user
-async def get_startup_database():
-    client_local = AsyncIOMotorClient(mongo_url)
-    return client_local, client_local[DB_NAME]
-
-
 @app.on_event("startup")
 async def initialize_data():
-    client_local, database = await get_startup_database()
+    database = _get_mongo_client()[DB_NAME]
     try:
         logger.info("Startup: ENV=%s DB_NAME=%s", ENVIRONMENT, os.environ.get("DB_NAME"))
+
+        # Index sur les champs "id" (uuid) et champs de recherche fréquents.
+        # Accélère fortement les recherches (find_one/find par id, par joueur, etc.)
+        # au lieu d'un parcours complet de chaque collection.
+        try:
+            await database.players.create_index("id")
+            await database.coaches.create_index("id")
+            await database.users.create_index("id")
+            await database.users.create_index("email")
+            await database.sessions.create_index("id")
+            await database.sessions.create_index("player_ids")
+            await database.sessions.create_index("session_date")
+            await database.evaluations.create_index("id")
+            await database.evaluations.create_index("player_id")
+            await database.collective_sessions.create_index("id")
+            await database.attendances.create_index("id")
+            await database.attendances.create_index("player_id")
+            await database.attendances.create_index("session_id")
+            await database.matches.create_index("id")
+            await database.match_participations.create_index("id")
+            await database.match_participations.create_index("player_id")
+            await database.match_participations.create_index("match_id")
+            logger.info("Index MongoDB vérifiés/créés avec succès")
+        except Exception as e:
+            logger.error("Erreur lors de la création des index: %s", e)
 
         # Check if admin user exists
         admin_user = await database.users.find_one({"role": "admin"})
@@ -2271,8 +2318,8 @@ async def initialize_data():
         except Exception as e:
             logger.error("Erreur lors de la mise à jour des thèmes: %s", e)
 
-    finally:
-        client_local.close()
+    except Exception as e:
+        logger.error("Erreur lors de l'initialisation au démarrage: %s", e)
 
 
 # CORS configuration
