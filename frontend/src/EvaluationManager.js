@@ -124,36 +124,35 @@ const EvaluationManager = () => {
     setLoading(true);
     try {
       const evaluations = {};
-      
-      // Charger les évaluations existantes pour tous les joueurs pour ce thème
+
+      // Un seul appel pour récupérer la dernière évaluation de TOUS les joueurs
+      // (au lieu d'un appel par joueur, ce qui était très lent)
+      let latestByPlayer = {};
+      try {
+        const response = await axios.get(`${API}/evaluations/latest/all`);
+        latestByPlayer = response.data || {};
+      } catch (error) {
+        console.error('Erreur lors du chargement des évaluations existantes:', error);
+      }
+
       for (const player of players) {
-        try {
-          const response = await axios.get(`${API}/evaluations/player/${player.id}/latest`);
-          const playerEvaluation = response.data;
-          
-          // Trouver le thème dans l'évaluation
-          const themeData = playerEvaluation.themes?.find(t => t.name === theme.name);
-          if (themeData) {
-            evaluations[player.id] = themeData.aspects.reduce((acc, aspect) => {
-              acc[aspect.name] = aspect.score;
-              return acc;
-            }, {});
-          } else {
-            // Initialiser avec des valeurs par défaut si pas d'évaluation
-            evaluations[player.id] = theme.aspects.reduce((acc, aspect) => {
-              acc[aspect] = 3;
-              return acc;
-            }, {});
-          }
-        } catch (error) {
-          // Pas d'évaluation existante, initialiser avec des valeurs par défaut
+        const playerEvaluation = latestByPlayer[player.id];
+        const themeData = playerEvaluation?.themes?.find(t => t.name === theme.name);
+
+        if (themeData) {
+          evaluations[player.id] = themeData.aspects.reduce((acc, aspect) => {
+            acc[aspect.name] = aspect.score;
+            return acc;
+          }, {});
+        } else {
+          // Pas d'évaluation existante pour ce thème, initialiser avec des valeurs par défaut
           evaluations[player.id] = theme.aspects.reduce((acc, aspect) => {
             acc[aspect] = 3;
             return acc;
           }, {});
         }
       }
-      
+
       setEvaluationData(evaluations);
     } catch (error) {
       console.error('Erreur lors du chargement des évaluations:', error);
