@@ -1,4 +1,4 @@
-# 🏀 Basketball Manager - Stade Rochelais
+# 🏀 Basketball Manager 
 
 Application de gestion d'entraînements de basketball avec système de suivi des joueurs, séances et évaluations.
 
