@@ -375,7 +375,7 @@
   50% { background-position: 100% 50%; }
 }
 
-/* Styles pour les boutons d'état des séances collectives */
+/* Styles pour les boutons d'Ã©tat des sÃ©ances collectives */
 .attendance-button {
   background: white !important;
   border: 2px solid #d1d5db !important;
@@ -431,4 +431,9 @@
   .print-break {
     page-break-before: always;
   }
+}
+
+/* Masque les boutons/contrÃ´les non pertinents pendant la capture pour l'export PDF */
+.pdf-exporting .no-print {
+  visibility: hidden !important;
 }
