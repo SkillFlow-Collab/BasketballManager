@@ -155,6 +155,10 @@ class TeamType(str, Enum):
     U21 = "U21"
     Pro = "Pro"
 
+class StatObjective(BaseModel):
+    label: str  # e.g. "Pourcentage à 3pts"
+    target: str  # e.g. "40%" (free text so any kind of stat/unit can be entered)
+
 class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     first_name: str
@@ -165,6 +169,11 @@ class Player(BaseModel):
     coach_referent: Optional[str] = None
     photo: Optional[str] = None  # Base64 encoded photo
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    # Fiche joueur - projet individuel
+    objectives: Optional[str] = None  # Objectifs du joueur
+    work_axes: Optional[str] = None  # Axes de travail
+    strengths_to_keep: Optional[str] = None  # Points forts à conserver
+    stat_objectives: Optional[List[StatObjective]] = Field(default_factory=list)  # Objectifs statistiques
 
 class PlayerCreate(BaseModel):
     first_name: str
@@ -174,6 +183,10 @@ class PlayerCreate(BaseModel):
     team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
     photo: Optional[str] = None
+    objectives: Optional[str] = None
+    work_axes: Optional[str] = None
+    strengths_to_keep: Optional[str] = None
+    stat_objectives: Optional[List[StatObjective]] = Field(default_factory=list)
 
 class PlayerUpdate(BaseModel):
     first_name: Optional[str] = None
@@ -183,6 +196,10 @@ class PlayerUpdate(BaseModel):
     team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
     photo: Optional[str] = None
+    objectives: Optional[str] = None
+    work_axes: Optional[str] = None
+    strengths_to_keep: Optional[str] = None
+    stat_objectives: Optional[List[StatObjective]] = None
 
 class Session(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
