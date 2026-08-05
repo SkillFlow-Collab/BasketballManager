@@ -1492,11 +1492,20 @@ async def get_player_attendance_report(
     
     # Get all attendances for the player
     attendances = await database.attendances.find({"player_id": player_id}).to_list(1000)
-    
+
+    # Récupère toutes les séances collectives concernées en UNE seule requête
+    # (au lieu d'une requête par séance, ce qui était lent)
+    collective_session_ids = list({a["collective_session_id"] for a in attendances if a.get("collective_session_id")})
+    sessions_by_id = {}
+    if collective_session_ids:
+        sessions_cursor = database.collective_sessions.find({"id": {"$in": collective_session_ids}})
+        async for s in sessions_cursor:
+            sessions_by_id[s["id"]] = s
+
     # Get session info and apply filters
     attendance_data = []
     for attendance in attendances:
-        session = await database.collective_sessions.find_one({"id": attendance["collective_session_id"]})
+        session = sessions_by_id.get(attendance["collective_session_id"])
         if session:
             # Convert session_date to datetime for comparison
             if isinstance(session["session_date"], str):
@@ -2353,3 +2362,4 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     logger.info("Shutdown complete")
+    
