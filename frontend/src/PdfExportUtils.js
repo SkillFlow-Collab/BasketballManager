@@ -3,62 +3,98 @@ import { jsPDF } from 'jspdf';
 
 // Fonction utilitaire pour exporter un élément en PDF
 export const exportToPDF = async (elementId, filename = 'export', options = {}) => {
+  const element = document.getElementById(elementId);
+  const loadingDiv = document.createElement('div');
   try {
     // Afficher un message de chargement
-    const loadingDiv = document.createElement('div');
     loadingDiv.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
     loadingDiv.textContent = '📄 Génération du PDF...';
     document.body.appendChild(loadingDiv);
 
-    // Obtenir l'élément à capturer
-    const element = document.getElementById(elementId);
     if (!element) {
       throw new Error(`Élément avec l'ID "${elementId}" introuvable`);
     }
 
-    // Options par défaut pour html2canvas
+    // Masque temporairement les boutons/contrôles (ex: "Télécharger", "Modifier")
+    // pour qu'ils n'apparaissent pas dans le PDF
+    element.classList.add('pdf-exporting');
+
+    // Options par défaut pour html2canvas (résolution plus élevée = rendu plus net)
     const defaultOptions = {
-      scale: 2, // Meilleure qualité
-      useCORS: true, // Pour les images externes
+      scale: 2.5,
+      useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
-      width: element.scrollWidth,
-      height: element.scrollHeight,
+      windowWidth: element.scrollWidth,
       scrollX: 0,
       scrollY: 0,
       ...options
     };
 
-    // Capturer l'élément
+    // Capturer l'élément (une seule grande image de tout le contenu)
     const canvas = await html2canvas(element, defaultOptions);
-    
-    // Créer le PDF
+
+    // Créer le PDF et répartir le contenu sur les pages A4,
+    // en visant un maximum de 2 pages plutôt que de tout écraser sur une seule (illisible).
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
-    
-    // Calculer les dimensions pour s'adapter à la page
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    const ratio = Math.min(pdfWidth / (canvasWidth * 0.264583), pdfHeight / (canvasHeight * 0.264583));
-    
-    const imgWidth = canvasWidth * 0.264583 * ratio;
-    const imgHeight = canvasHeight * 0.264583 * ratio;
-    
-    // Centrer l'image dans la page
-    const x = (pdfWidth - imgWidth) / 2;
-    const y = (pdfHeight - imgHeight) / 2;
-    
-    // Ajouter l'image au PDF
-    const imgData = canvas.toDataURL('image/png');
-    pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight);
-    
+    const margin = 8; // mm, marge autour du contenu sur chaque page
+    const usableWidth = pdfWidth - margin * 2;
+    const usableHeight = pdfHeight - margin * 2;
+    const TARGET_PAGES = 2;
+
+    // Échelle "pleine largeur" (la meilleure qualité possible)
+    const widthFitPxToMm = usableWidth / canvas.width;
+    // Échelle nécessaire pour que TOUT le contenu tienne sur TARGET_PAGES pages
+    const heightFitPxToMm = (usableHeight * TARGET_PAGES) / canvas.height;
+    // On prend la plus petite des deux : la qualité maximale si ça tient déjà,
+    // sinon on réduit juste assez pour ne jamais dépasser le nombre de pages visé.
+    const pxToMm = Math.min(widthFitPxToMm, heightFitPxToMm);
+
+    const imgRenderWidthMm = canvas.width * pxToMm;
+    const xOffset = margin + (usableWidth - imgRenderWidthMm) / 2; // centré si plus étroit que la page
+    const pageHeightPx = usableHeight / pxToMm;
+
+    const MAX_PAGES = TARGET_PAGES + 1; // petite marge de sécurité pour les arrondis
+    let renderedHeightPx = 0;
+    let pageIndex = 0;
+
+    while (renderedHeightPx < canvas.height && pageIndex < MAX_PAGES) {
+      const sliceHeightPx = Math.min(pageHeightPx, canvas.height - renderedHeightPx);
+
+      // Découpe la tranche correspondant à cette page dans un canvas temporaire
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = sliceHeightPx;
+      const ctx = pageCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      ctx.drawImage(
+        canvas,
+        0, renderedHeightPx, canvas.width, sliceHeightPx,
+        0, 0, canvas.width, sliceHeightPx
+      );
+
+      const imgData = pageCanvas.toDataURL('image/png');
+      const imgHeightMm = sliceHeightPx * pxToMm;
+
+      if (pageIndex > 0) {
+        pdf.addPage();
+      }
+      pdf.addImage(imgData, 'PNG', xOffset, margin, imgRenderWidthMm, imgHeightMm);
+
+      renderedHeightPx += sliceHeightPx;
+      pageIndex += 1;
+    }
+
     // Télécharger le PDF
     pdf.save(`${filename}.pdf`);
-    
-    // Supprimer le message de chargement
+
+    // Retirer les classes/éléments temporaires
+    element.classList.remove('pdf-exporting');
     document.body.removeChild(loadingDiv);
-    
+
     // Message de succès
     const successDiv = document.createElement('div');
     successDiv.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
@@ -74,10 +110,13 @@ export const exportToPDF = async (elementId, filename = 'export', options = {}) 
     return true;
   } catch (error) {
     console.error('Erreur lors de l\'export en PDF:', error);
-    
+
+    if (element) {
+      element.classList.remove('pdf-exporting');
+    }
+
     // Supprimer le message de chargement s'il existe
-    const loadingDiv = document.querySelector('.fixed.top-4.right-4');
-    if (loadingDiv) {
+    if (loadingDiv.parentNode) {
       document.body.removeChild(loadingDiv);
     }
     
