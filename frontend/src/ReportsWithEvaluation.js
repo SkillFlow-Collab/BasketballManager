@@ -677,7 +677,7 @@ const ReportsWithEvaluation = () => {
                   </div>
                   <button
                     onClick={() => exportPlayerReport(`${playerReport.player.first_name} ${playerReport.player.last_name}`)}
-                    className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-6 py-3 rounded-xl transition-all duration-300 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105"
+                    className="no-print bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-6 py-3 rounded-xl transition-all duration-300 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105"
                   >
                     <span className="text-lg">📄</span>
                     <span className="font-semibold">Télécharger</span>
@@ -714,7 +714,7 @@ const ReportsWithEvaluation = () => {
                   {!ficheEditMode ? (
                     <button
                       onClick={() => setFicheEditMode(true)}
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl transition-colors text-sm font-semibold"
+                      className="no-print bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl transition-colors text-sm font-semibold"
                     >
                       ✏️ Modifier la fiche
                     </button>
@@ -861,7 +861,7 @@ const ReportsWithEvaluation = () => {
                   </div>
 
                   {/* Nouveaux contrôles radar simplifiés */}
-                  <div className="mb-6">
+                  <div className="mb-6 no-print">
                     <h4 className="text-md font-semibold text-gray-700 mb-4">Données à afficher sur le radar :</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <label className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
@@ -1214,7 +1214,7 @@ const ReportsWithEvaluation = () => {
                   </div>
                   <button
                     onClick={() => exportCoachReport(`${coachReport.coach.first_name} ${coachReport.coach.last_name}`)}
-                    className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-6 py-3 rounded-xl transition-all duration-300 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105"
+                    className="no-print bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-6 py-3 rounded-xl transition-all duration-300 flex items-center space-x-2 shadow-lg hover:shadow-xl transform hover:scale-105"
                   >
                     <span className="text-lg">📄</span>
                     <span className="font-semibold">Télécharger</span>
