@@ -1153,38 +1153,6 @@ const ReportsWithEvaluation = () => {
                       </div>
                     )}
                   </div>
-
-                  {/* Dernières séances collectives */}
-                  {attendanceReport.statistics.recent_attendances && attendanceReport.statistics.recent_attendances.length > 0 && (
-                    <div className="mt-6">
-                      <h5 className="font-medium text-gray-700 mb-3">Dernières séances collectives :</h5>
-                      <div className="space-y-2">
-                        {attendanceReport.statistics.recent_attendances.map((item, index) => {
-                          const statusStyles = {
-                            present: { label: 'Présent', className: 'bg-green-100 text-green-700' },
-                            absent: { label: 'Absent', className: 'bg-red-100 text-red-700' },
-                            injured: { label: 'Blessé', className: 'bg-yellow-100 text-yellow-700' },
-                            off: { label: 'Repos', className: 'bg-gray-200 text-gray-600' },
-                          };
-                          const style = statusStyles[item.status] || { label: item.status, className: 'bg-gray-100 text-gray-600' };
-                          return (
-                            <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl text-sm">
-                              <div>
-                                <span className="font-medium text-gray-700">{item.session_type}</span>
-                                <span className="text-gray-500 ml-2">
-                                  {new Date(item.session_date).toLocaleDateString('fr-FR')}
-                                </span>
-                                {item.notes && <p className="text-gray-500 text-xs mt-1">{item.notes}</p>}
-                              </div>
-                              <span className={`px-3 py-1 rounded-full font-semibold ${style.className}`}>
-                                {style.label}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
