@@ -974,6 +974,19 @@ async def get_latest_player_evaluation(player_id: str, current_user: User = Depe
         raise HTTPException(status_code=404, detail="No evaluation found for this player")
     return PlayerEvaluation(**evaluation)
 
+@api_router.get("/evaluations/latest/all")
+async def get_latest_evaluations_all_players(current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    """Renvoie en UNE seule requête la dernière évaluation de chaque joueur (clé = player_id).
+    Évite de faire un appel séparé par joueur depuis le frontend (beaucoup plus rapide)."""
+    evaluations = await database.evaluations.find().sort("evaluation_date", -1).to_list(5000)
+    latest_by_player = {}
+    for evaluation in evaluations:
+        player_id = evaluation.get("player_id")
+        if player_id and player_id not in latest_by_player:
+            evaluation.pop("_id", None)
+            latest_by_player[player_id] = evaluation
+    return latest_by_player
+
 @api_router.get("/evaluations/player/{player_id}/average")
 async def get_player_evaluation_average(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     evaluations = await database.evaluations.find({"player_id": player_id}).to_list(100)
