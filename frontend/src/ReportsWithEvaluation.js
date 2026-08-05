@@ -54,10 +54,91 @@ const ReportsWithEvaluation = () => {
     end_date: ''
   });
 
+  // Fiche Joueur (objectifs, axes de travail, points forts, objectifs statistiques)
+  const emptyFiche = { objectives: '', work_axes: '', strengths_to_keep: '', stat_objectives: [] };
+  const [ficheEditMode, setFicheEditMode] = useState(false);
+  const [ficheForm, setFicheForm] = useState(emptyFiche);
+  const [savingFiche, setSavingFiche] = useState(false);
+
   useEffect(() => {
     fetchPlayers();
     fetchCoaches();
   }, []);
+
+  // Synchronise le formulaire de fiche joueur avec les données chargées
+  useEffect(() => {
+    if (playerReport && playerReport.player && !ficheEditMode) {
+      setFicheForm({
+        objectives: playerReport.player.objectives || '',
+        work_axes: playerReport.player.work_axes || '',
+        strengths_to_keep: playerReport.player.strengths_to_keep || '',
+        stat_objectives: playerReport.player.stat_objectives && playerReport.player.stat_objectives.length > 0
+          ? playerReport.player.stat_objectives
+          : []
+      });
+    }
+  }, [playerReport, ficheEditMode]);
+
+  const handleFicheChange = (field, value) => {
+    setFicheForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleStatObjectiveChange = (index, field, value) => {
+    setFicheForm(prev => {
+      const updated = [...prev.stat_objectives];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, stat_objectives: updated };
+    });
+  };
+
+  const addStatObjective = () => {
+    setFicheForm(prev => ({
+      ...prev,
+      stat_objectives: [...prev.stat_objectives, { label: '', target: '' }]
+    }));
+  };
+
+  const removeStatObjective = (index) => {
+    setFicheForm(prev => ({
+      ...prev,
+      stat_objectives: prev.stat_objectives.filter((_, i) => i !== index)
+    }));
+  };
+
+  const cancelFicheEdit = () => {
+    if (playerReport && playerReport.player) {
+      setFicheForm({
+        objectives: playerReport.player.objectives || '',
+        work_axes: playerReport.player.work_axes || '',
+        strengths_to_keep: playerReport.player.strengths_to_keep || '',
+        stat_objectives: playerReport.player.stat_objectives || []
+      });
+    }
+    setFicheEditMode(false);
+  };
+
+  const saveFiche = async () => {
+    if (!selectedPlayer) return;
+    setSavingFiche(true);
+    try {
+      const cleanedStatObjectives = ficheForm.stat_objectives.filter(
+        (so) => (so.label && so.label.trim()) || (so.target && so.target.trim())
+      );
+      await axios.put(`${API}/players/${selectedPlayer}`, {
+        objectives: ficheForm.objectives,
+        work_axes: ficheForm.work_axes,
+        strengths_to_keep: ficheForm.strengths_to_keep,
+        stat_objectives: cleanedStatObjectives
+      });
+      setFicheEditMode(false);
+      await fetchPlayerReport(selectedPlayer);
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde de la fiche joueur:', error);
+      alert("Une erreur est survenue lors de l'enregistrement de la fiche joueur.");
+    } finally {
+      setSavingFiche(false);
+    }
+  };
 
   const fetchPlayers = async () => {
     try {
@@ -616,6 +697,149 @@ const ReportsWithEvaluation = () => {
                       <p className="text-sm text-orange-600">Taux de présence</p>
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Fiche Joueur - Objectifs, axes de travail, points forts, objectifs statistiques */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-gray-800">Fiche Joueur</h3>
+                  {!ficheEditMode ? (
+                    <button
+                      onClick={() => setFicheEditMode(true)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl transition-colors text-sm font-semibold"
+                    >
+                      ✏️ Modifier la fiche
+                    </button>
+                  ) : (
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={cancelFicheEdit}
+                        disabled={savingFiche}
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-xl transition-colors text-sm font-semibold"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        onClick={saveFiche}
+                        disabled={savingFiche}
+                        className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl transition-colors text-sm font-semibold"
+                      >
+                        {savingFiche ? 'Enregistrement...' : '💾 Enregistrer'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Objectifs */}
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-700 mb-2">🎯 Objectifs du joueur</h4>
+                    {ficheEditMode ? (
+                      <textarea
+                        value={ficheForm.objectives}
+                        onChange={(e) => handleFicheChange('objectives', e.target.value)}
+                        rows={4}
+                        placeholder="Ex : Devenir titulaire, améliorer le shoot extérieur..."
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-gray-600 bg-gray-50 p-3 rounded-xl whitespace-pre-line min-h-[3rem]">
+                        {playerReport.player.objectives || 'Aucun objectif renseigné.'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Points forts à conserver */}
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-700 mb-2">💪 Points forts à conserver</h4>
+                    {ficheEditMode ? (
+                      <textarea
+                        value={ficheForm.strengths_to_keep}
+                        onChange={(e) => handleFicheChange('strengths_to_keep', e.target.value)}
+                        rows={4}
+                        placeholder="Ex : Vitesse d'exécution, leadership sur le terrain..."
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-gray-600 bg-gray-50 p-3 rounded-xl whitespace-pre-line min-h-[3rem]">
+                        {playerReport.player.strengths_to_keep || 'Aucun point fort renseigné.'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Axes de travail */}
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-700 mb-2">🛠️ Axes de travail</h4>
+                    {ficheEditMode ? (
+                      <textarea
+                        value={ficheForm.work_axes}
+                        onChange={(e) => handleFicheChange('work_axes', e.target.value)}
+                        rows={4}
+                        placeholder="Ex : Défense individuelle, prise de décision..."
+                        className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-gray-600 bg-gray-50 p-3 rounded-xl whitespace-pre-line min-h-[3rem]">
+                        {playerReport.player.work_axes || 'Aucun axe de travail renseigné.'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Objectifs statistiques */}
+                  <div>
+                    <h4 className="text-md font-semibold text-gray-700 mb-2">📊 Objectifs statistiques</h4>
+                    {ficheEditMode ? (
+                      <div className="space-y-2">
+                        {ficheForm.stat_objectives.map((so, index) => (
+                          <div key={index} className="flex items-center space-x-2">
+                            <input
+                              type="text"
+                              value={so.label}
+                              onChange={(e) => handleStatObjectiveChange(index, 'label', e.target.value)}
+                              placeholder="Ex : % réussite à 3pts"
+                              className="flex-1 p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            <input
+                              type="text"
+                              value={so.target}
+                              onChange={(e) => handleStatObjectiveChange(index, 'target', e.target.value)}
+                              placeholder="Ex : 40%"
+                              className="w-28 p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            <button
+                              onClick={() => removeStatObjective(index)}
+                              className="text-red-500 hover:text-red-700 px-2"
+                              title="Supprimer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={addStatObjective}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-semibold mt-1"
+                        >
+                          + Ajouter un objectif statistique
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 p-3 rounded-xl min-h-[3rem]">
+                        {playerReport.player.stat_objectives && playerReport.player.stat_objectives.length > 0 ? (
+                          <div className="space-y-2">
+                            {playerReport.player.stat_objectives.map((so, index) => (
+                              <div key={index} className="flex justify-between items-center">
+                                <span className="text-gray-700">{so.label}</span>
+                                <span className="font-bold text-blue-600">{so.target}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-gray-600">Aucun objectif statistique renseigné.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
