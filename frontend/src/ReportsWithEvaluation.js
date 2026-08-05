@@ -344,12 +344,17 @@ const ReportsWithEvaluation = () => {
   const themeDistributionOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    cutout: '45%', // Anneau plutôt que camembert plein : plus lisible, moins chargé au centre
     plugins: {
       legend: {
         position: 'bottom',
         labels: {
           usePointStyle: true,
-          padding: 15
+          boxWidth: 8,
+          padding: 12,
+          font: {
+            size: 11
+          }
         }
       },
       tooltip: {
@@ -368,12 +373,14 @@ const ReportsWithEvaluation = () => {
         color: '#fff',
         font: {
           weight: 'bold',
-          size: 12
+          size: 11
         },
         formatter: (value, context) => {
           const total = context.dataset.data.reduce((a, b) => a + b, 0);
-          const percentage = ((value / total) * 100).toFixed(1);
-          return percentage + '%';
+          const percentage = (value / total) * 100;
+          // Masque le pourcentage sur les toutes petites parts pour éviter que les chiffres se chevauchent
+          if (percentage < 6) return '';
+          return percentage.toFixed(1) + '%';
         }
       }
     }
@@ -1007,101 +1014,12 @@ const ReportsWithEvaluation = () => {
                 </div>
               )}
 
-              {/* Attendance Statistics - Simplified */}
-              {attendanceReport && (
-                <div className="bg-white rounded-2xl shadow-lg p-6">
-                  <h3 className="text-xl font-bold text-gray-800 mb-6">Suivis séances</h3>
-                  
-                  {/* Raw Data Summary */}
-                  <div className="p-4 bg-gray-100 rounded-xl">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-green-600">{attendanceReport.statistics.presence_rate}%</div>
-                        <div className="text-gray-600">Taux présence</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-red-600">{attendanceReport.statistics.absent}</div>
-                        <div className="text-gray-600">Séances ratées</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-yellow-600">{attendanceReport.statistics.injured}</div>
-                        <div className="text-gray-600">Séances blessé</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-orange-600">
-                          {attendanceReport.statistics.by_type.Musculation?.absent || 0}
-                        </div>
-                        <div className="text-gray-600">Muscu ratées</div>
-                      </div>
-                    </div>
-                    
-                    {/* Detailed breakdown by session type */}
-                    {Object.keys(attendanceReport.statistics.by_type).length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-gray-300">
-                        <h5 className="font-medium text-gray-700 mb-2">Détail par type de séance :</h5>
-                        <div className="space-y-2">
-                          {Object.entries(attendanceReport.statistics.by_type).map(([sessionType, stats]) => (
-                            <div key={sessionType} className="flex justify-between items-center text-sm">
-                              <span className="font-medium">{sessionType} :</span>
-                              <span>
-                                <span className="text-red-600 font-medium">{stats.absent} ratées</span>
-                                {stats.injured > 0 && (
-                                  <span className="text-yellow-600 font-medium ml-2">{stats.injured} blessé</span>
-                                )}
-                                <span className="text-gray-500 ml-2">/ {stats.total} total</span>
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Match Statistics */}
-              {playerReport.match_stats && (
-                <div className="bg-white rounded-2xl shadow-lg p-6">
-                  <h3 className="text-xl font-bold text-gray-800 mb-6">Suivi des matchs</h3>
-                  
-                  {/* Match Statistics Summary - Simplified with separate U18/U21 averages */}
-                  <div className="p-4 bg-gray-100 rounded-xl">
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {playerReport.match_stats.team_breakdown.U18?.played || 0}
-                        </div>
-                        <div className="text-gray-600">Matchs U18 joués</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-purple-600">
-                          {playerReport.match_stats.team_breakdown.U21?.played || 0}
-                        </div>
-                        <div className="text-gray-600">Matchs U21 joués</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-green-600">{playerReport.match_stats.matches_started}</div>
-                        <div className="text-gray-600">5 de départ</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-orange-600">{playerReport.match_stats.average_play_time_u18 || 0}</div>
-                        <div className="text-gray-600">Moy. min U18</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-red-600">{playerReport.match_stats.average_play_time_u21 || 0}</div>
-                        <div className="text-gray-600">Moy. min U21</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Theme Distribution Chart + Details */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Theme Distribution Pie Chart */}
                 <div className="bg-white rounded-2xl shadow-lg p-6">
                   <h3 className="text-xl font-bold text-gray-800 mb-4">Répartition des Thèmes</h3>
-                  <div style={{ height: '300px' }}>
+                  <div style={{ height: '340px' }}>
                     {getThemeDistributionData() && <Pie data={getThemeDistributionData()} options={themeDistributionOptions} />}
                   </div>
                 </div>
@@ -1148,6 +1066,127 @@ const ReportsWithEvaluation = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Match Statistics */}
+              {playerReport.match_stats && (
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <h3 className="text-xl font-bold text-gray-800 mb-6">Suivi des matchs</h3>
+                  
+                  {/* Match Statistics Summary - Simplified with separate U18/U21 averages */}
+                  <div className="p-4 bg-gray-100 rounded-xl">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {playerReport.match_stats.team_breakdown.U18?.played || 0}
+                        </div>
+                        <div className="text-gray-600">Matchs U18 joués</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-purple-600">
+                          {playerReport.match_stats.team_breakdown.U21?.played || 0}
+                        </div>
+                        <div className="text-gray-600">Matchs U21 joués</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">{playerReport.match_stats.matches_started}</div>
+                        <div className="text-gray-600">5 de départ</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-orange-600">{playerReport.match_stats.average_play_time_u18 || 0}</div>
+                        <div className="text-gray-600">Moy. min U18</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-red-600">{playerReport.match_stats.average_play_time_u21 || 0}</div>
+                        <div className="text-gray-600">Moy. min U21</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Suivi des Séances Collectives (présence/absence/blessure) */}
+              {attendanceReport && (
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <h3 className="text-xl font-bold text-gray-800 mb-6">Suivi des Séances Collectives</h3>
+
+                  {/* Résumé */}
+                  <div className="p-4 bg-gray-100 rounded-xl">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">{attendanceReport.statistics.presence_rate}%</div>
+                        <div className="text-gray-600">Taux présence</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-red-600">{attendanceReport.statistics.absent}</div>
+                        <div className="text-gray-600">Séances ratées</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-yellow-600">{attendanceReport.statistics.injured}</div>
+                        <div className="text-gray-600">Séances blessé</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-orange-600">
+                          {attendanceReport.statistics.by_type.Musculation?.absent || 0}
+                        </div>
+                        <div className="text-gray-600">Muscu ratées</div>
+                      </div>
+                    </div>
+
+                    {/* Détail par type de séance */}
+                    {Object.keys(attendanceReport.statistics.by_type).length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-300">
+                        <h5 className="font-medium text-gray-700 mb-2">Détail par type de séance :</h5>
+                        <div className="space-y-2">
+                          {Object.entries(attendanceReport.statistics.by_type).map(([sessionType, stats]) => (
+                            <div key={sessionType} className="flex justify-between items-center text-sm">
+                              <span className="font-medium">{sessionType} :</span>
+                              <span>
+                                <span className="text-red-600 font-medium">{stats.absent} ratées</span>
+                                {stats.injured > 0 && (
+                                  <span className="text-yellow-600 font-medium ml-2">{stats.injured} blessé</span>
+                                )}
+                                <span className="text-gray-500 ml-2">/ {stats.total} total</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Dernières séances collectives */}
+                  {attendanceReport.statistics.recent_attendances && attendanceReport.statistics.recent_attendances.length > 0 && (
+                    <div className="mt-6">
+                      <h5 className="font-medium text-gray-700 mb-3">Dernières séances collectives :</h5>
+                      <div className="space-y-2">
+                        {attendanceReport.statistics.recent_attendances.map((item, index) => {
+                          const statusStyles = {
+                            present: { label: 'Présent', className: 'bg-green-100 text-green-700' },
+                            absent: { label: 'Absent', className: 'bg-red-100 text-red-700' },
+                            injured: { label: 'Blessé', className: 'bg-yellow-100 text-yellow-700' },
+                            off: { label: 'Repos', className: 'bg-gray-200 text-gray-600' },
+                          };
+                          const style = statusStyles[item.status] || { label: item.status, className: 'bg-gray-100 text-gray-600' };
+                          return (
+                            <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl text-sm">
+                              <div>
+                                <span className="font-medium text-gray-700">{item.session_type}</span>
+                                <span className="text-gray-500 ml-2">
+                                  {new Date(item.session_date).toLocaleDateString('fr-FR')}
+                                </span>
+                                {item.notes && <p className="text-gray-500 text-xs mt-1">{item.notes}</p>}
+                              </div>
+                              <span className={`px-3 py-1 rounded-full font-semibold ${style.className}`}>
+                                {style.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Recent Sessions */}
               <div className="bg-white rounded-2xl shadow-lg p-6">
