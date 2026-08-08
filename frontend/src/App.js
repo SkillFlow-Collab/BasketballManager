@@ -7,6 +7,7 @@ import ReportsWithEvaluation from "./ReportsWithEvaluation";
 import AttendanceManager from "./AttendanceManager";
 import CollectifManager from "./CollectifManager";
 import EvaluationManager from "./EvaluationManager";
+import ExerciseLibrary from "./ExerciseLibrary";
 import { exportDashboard } from "./PdfExportUtils";
 import {
   Chart as ChartJS,
@@ -619,6 +620,12 @@ const Navigation = () => {
               className={`nav-item-compact ${isActive('/entrainements') ? 'nav-item-active-compact' : 'nav-item-inactive-compact'}`}
             >
               Séances Individuelles
+            </Link>
+            <Link 
+              to="/exercices" 
+              className={`nav-item-compact ${isActive('/exercices') ? 'nav-item-active-compact' : 'nav-item-inactive-compact'}`}
+            >
+              Exercices
             </Link>
             <Link 
               to="/assiduite" 
@@ -2274,6 +2281,7 @@ const SessionsAndCalendar = () => {
 const SessionsList = () => {
   const [sessions, setSessions] = useState([]);
   const [players, setPlayers] = useState([]);
+  const [exercises, setExercises] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
   const [selectedPlayer, setSelectedPlayer] = useState('');
@@ -2284,12 +2292,14 @@ const SessionsList = () => {
     themes: [],
     trainers: [],
     content_details: '',
-    notes: ''
+    notes: '',
+    exercise_ids: []
   });
 
   useEffect(() => {
     fetchSessions();
     fetchPlayers();
+    fetchExercises();
   }, []);
 
   const fetchSessions = async () => {
@@ -2307,6 +2317,15 @@ const SessionsList = () => {
       setPlayers(response.data);
     } catch (error) {
       console.error('Erreur lors du chargement des joueurs:', error);
+    }
+  };
+
+  const fetchExercises = async () => {
+    try {
+      const response = await axios.get(`${API}/exercises`);
+      setExercises(response.data);
+    } catch (error) {
+      console.error('Erreur lors du chargement des exercices:', error);
     }
   };
 
@@ -2329,7 +2348,8 @@ const SessionsList = () => {
         themes: [],
         trainers: [],
         content_details: '',
-        notes: ''
+        notes: '',
+        exercise_ids: []
       });
       fetchSessions();
     } catch (error) {
@@ -2345,7 +2365,8 @@ const SessionsList = () => {
       themes: session.themes || [],
       trainers: session.trainers || [],
       content_details: session.content_details || '',
-      notes: session.notes || ''
+      notes: session.notes || '',
+      exercise_ids: session.exercise_ids || []
     });
     setShowForm(true);
   };
@@ -2377,6 +2398,20 @@ const SessionsList = () => {
         ? prev.trainers.filter(t => t !== trainer)
         : [...prev.trainers, trainer]
     }));
+  };
+
+  const handleExerciseSelectionChange = (exerciseId) => {
+    setFormData(prev => ({
+      ...prev,
+      exercise_ids: (prev.exercise_ids || []).includes(exerciseId)
+        ? prev.exercise_ids.filter(id => id !== exerciseId)
+        : [...(prev.exercise_ids || []), exerciseId]
+    }));
+  };
+
+  const getExerciseNames = (exerciseIds) => {
+    if (!exerciseIds || exerciseIds.length === 0) return [];
+    return exerciseIds.map(id => exercises.find(ex => ex.id === id)?.name).filter(Boolean);
   };
 
   const handlePlayerChange = (playerId) => {
@@ -2485,6 +2520,35 @@ const SessionsList = () => {
                 </div>
               </div>
 
+              {/* Sélection des exercices de la bibliothèque */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Exercices de la séance (optionnel)
+                </label>
+                {exercises.length === 0 ? (
+                  <p className="text-sm text-gray-500 border rounded-xl p-3">
+                    Aucun exercice dans ta bibliothèque pour l'instant. Ajoutes-en depuis l'onglet "Exercices".
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-xl p-3">
+                    {exercises.map(exercise => (
+                      <label key={exercise.id} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={(formData.exercise_ids || []).includes(exercise.id)}
+                          onChange={() => handleExerciseSelectionChange(exercise.id)}
+                          className="rounded text-blue-600"
+                        />
+                        <span className="text-sm">
+                          {exercise.name}
+                          {exercise.category && <span className="text-gray-400"> · {exercise.category}</span>}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Sélection des entraîneurs */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Entraîneurs</label>
@@ -2585,6 +2649,16 @@ const SessionsList = () => {
             <div className="border-t pt-4">
               <h4 className="font-medium text-gray-700 mb-2">Contenu:</h4>
               <p className="text-gray-600">{session.content_details}</p>
+              {getExerciseNames(session.exercise_ids).length > 0 && (
+                <>
+                  <h4 className="font-medium text-gray-700 mb-2 mt-3">Exercices utilisés :</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {getExerciseNames(session.exercise_ids).map((name, i) => (
+                      <span key={i} className="bg-blue-50 text-blue-700 px-2 py-1 rounded-full text-sm">{name}</span>
+                    ))}
+                  </div>
+                </>
+              )}
               {session.notes && (
                 <>
                   <h4 className="font-medium text-gray-700 mb-2 mt-3">Notes:</h4>
@@ -3666,6 +3740,7 @@ function App() {
                   <Route path="/joueurs" element={<Players />} />
                   <Route path="/evaluations" element={<EvaluationManager />} />
                   <Route path="/entrainements" element={<SessionsAndCalendar />} />
+                  <Route path="/exercices" element={<ExerciseLibrary />} />
                   <Route path="/assiduite" element={<CollectifManager />} />
                   <Route path="/rapports" element={<ReportsWithEvaluation />} />
                   <Route path="/admin" element={<Admin />} />
