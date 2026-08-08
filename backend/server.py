@@ -1459,34 +1459,49 @@ async def create_match_participation(participation_data: MatchParticipationCreat
 async def get_match_participations(match_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     # Get all participations for the match
     participations = await database.match_participations.find({"match_id": match_id}).to_list(100)
-    
-    # Enrich with player data
+
+    # Récupère tous les joueurs concernés en UNE seule requête
+    # (au lieu d'une requête par joueur, ce qui rendait l'écran très lent à charger)
+    player_ids = list({p["player_id"] for p in participations if p.get("player_id")})
+    players_by_id = {}
+    if player_ids:
+        players_cursor = database.players.find({"id": {"$in": player_ids}})
+        async for pl in players_cursor:
+            players_by_id[pl["id"]] = pl
+
     result = []
     for participation in participations:
-        player = await database.players.find_one({"id": participation["player_id"]})
+        player = players_by_id.get(participation["player_id"])
         if player:
             result.append({
                 "participation": MatchParticipation(**participation),
                 "player": Player(**{k: v for k, v in player.items() if k != "_id"})
             })
-    
+
     return result
 
 @api_router.get("/match-participations/player/{player_id}", response_model=List[dict])
 async def get_player_match_participations(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     # Get all participations for the player
     participations = await database.match_participations.find({"player_id": player_id}).to_list(100)
-    
-    # Enrich with match data
+
+    # Récupère tous les matchs concernés en UNE seule requête
+    match_ids = list({p["match_id"] for p in participations if p.get("match_id")})
+    matches_by_id = {}
+    if match_ids:
+        matches_cursor = database.matches.find({"id": {"$in": match_ids}})
+        async for m in matches_cursor:
+            matches_by_id[m["id"]] = m
+
     result = []
     for participation in participations:
-        match = await database.matches.find_one({"id": participation["match_id"]})
+        match = matches_by_id.get(participation["match_id"])
         if match:
             result.append({
                 "participation": MatchParticipation(**participation),
                 "match": Match(**match)
             })
-    
+
     return result
 
 @api_router.put("/match-participations/{participation_id}", response_model=MatchParticipation)
