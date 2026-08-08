@@ -231,6 +231,7 @@ class Session(BaseModel):
     trainers: List[str]  # Multiple trainers can be selected
     content_details: str  # Detailed content from coaches
     notes: Optional[str] = None
+    exercise_ids: Optional[List[str]] = Field(default_factory=list)  # Exercices de la bibliothèque liés à la séance
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class SessionCreate(BaseModel):
@@ -240,6 +241,7 @@ class SessionCreate(BaseModel):
     trainers: List[str]
     content_details: str
     notes: Optional[str] = None
+    exercise_ids: Optional[List[str]] = Field(default_factory=list)
 
 class SessionUpdate(BaseModel):
     session_date: Optional[date] = None
@@ -248,6 +250,7 @@ class SessionUpdate(BaseModel):
     trainers: Optional[List[str]] = None
     content_details: Optional[str] = None
     notes: Optional[str] = None
+    exercise_ids: Optional[List[str]] = None
 
 class PlayerReport(BaseModel):
     player: Player
@@ -339,6 +342,7 @@ class CollectiveSession(BaseModel):
     location: Optional[str] = None
     coach: Optional[str] = None
     notes: Optional[str] = None
+    exercise_ids: Optional[List[str]] = Field(default_factory=list)  # Exercices de la bibliothèque liés à la séance
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class AttendanceStatus(str, Enum):
@@ -362,6 +366,7 @@ class CollectiveSessionCreate(BaseModel):
     location: Optional[str] = None
     coach: Optional[str] = None
     notes: Optional[str] = None
+    exercise_ids: Optional[List[str]] = Field(default_factory=list)
 
 class AttendanceCreate(BaseModel):
     collective_session_id: str
@@ -372,6 +377,65 @@ class AttendanceCreate(BaseModel):
 class AttendanceUpdate(BaseModel):
     status: Optional[AttendanceStatus] = None
     notes: Optional[str] = None
+
+# Exercise Library Models (bibliothèque d'exercices pour préparer les séances)
+class ExerciseCategory(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ExerciseCategoryCreate(BaseModel):
+    name: str
+
+class ExerciseCategoryUpdate(BaseModel):
+    name: Optional[str] = None
+
+class Exercise(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    category: Optional[str] = None  # Nom de la catégorie (texte libre)
+    positions: Optional[List[str]] = Field(default_factory=list)  # Postes concernés : Arrière, Ailier, Intérieur
+    objective: Optional[str] = None  # Objectif de l'exercice
+    duration_minutes: Optional[int] = None
+    equipment: Optional[List[str]] = Field(default_factory=list)  # Matériel nécessaire
+    player_count: Optional[str] = None  # Nombre de joueurs (texte libre, ex: "4 à 6")
+    steps: Optional[str] = None  # Étape / Organisation / déroulé
+    key_instructions: Optional[str] = None  # Consignes clés
+    notes: Optional[str] = None
+    variants: Optional[str] = None
+    diagram: Optional[str] = None  # Schéma, encodé en base64
+    video_url: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ExerciseCreate(BaseModel):
+    name: str
+    category: Optional[str] = None
+    positions: Optional[List[str]] = Field(default_factory=list)
+    objective: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    equipment: Optional[List[str]] = Field(default_factory=list)
+    player_count: Optional[str] = None
+    steps: Optional[str] = None
+    key_instructions: Optional[str] = None
+    notes: Optional[str] = None
+    variants: Optional[str] = None
+    diagram: Optional[str] = None
+    video_url: Optional[str] = None
+
+class ExerciseUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    positions: Optional[List[str]] = None
+    objective: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    equipment: Optional[List[str]] = None
+    player_count: Optional[str] = None
+    steps: Optional[str] = None
+    key_instructions: Optional[str] = None
+    notes: Optional[str] = None
+    variants: Optional[str] = None
+    diagram: Optional[str] = None
+    video_url: Optional[str] = None
 
 # Match Models
 
@@ -775,6 +839,86 @@ async def delete_coach(coach_id: str, current_user: User = Depends(get_current_u
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Coach not found")
     return {"message": "Coach deleted successfully"}
+
+# Exercise Library endpoints (bibliothèque d'exercices)
+@api_router.post("/exercise-categories", response_model=ExerciseCategory)
+async def create_exercise_category(category_data: ExerciseCategoryCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    category_obj = ExerciseCategory(**category_data.dict())
+    await database.exercise_categories.insert_one(category_obj.dict())
+    return category_obj
+
+@api_router.get("/exercise-categories", response_model=List[ExerciseCategory])
+async def get_exercise_categories(current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    categories = await database.exercise_categories.find().to_list(200)
+    return [ExerciseCategory(**{k: v for k, v in c.items() if k != "_id"}) for c in categories]
+
+@api_router.put("/exercise-categories/{category_id}", response_model=ExerciseCategory)
+async def update_exercise_category(category_id: str, category_data: ExerciseCategoryUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    update_data = {k: v for k, v in category_data.dict().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+
+    old_category = await database.exercise_categories.find_one({"id": category_id})
+    if not old_category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    await database.exercise_categories.update_one({"id": category_id}, {"$set": update_data})
+
+    # Si le nom change, on met aussi à jour les exercices qui utilisent l'ancien nom
+    if "name" in update_data and update_data["name"] != old_category.get("name"):
+        await database.exercises.update_many(
+            {"category": old_category.get("name")},
+            {"$set": {"category": update_data["name"]}}
+        )
+
+    updated_category = await database.exercise_categories.find_one({"id": category_id})
+    return ExerciseCategory(**{k: v for k, v in updated_category.items() if k != "_id"})
+
+@api_router.delete("/exercise-categories/{category_id}")
+async def delete_exercise_category(category_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    result = await database.exercise_categories.delete_one({"id": category_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"message": "Category deleted successfully"}
+
+@api_router.post("/exercises", response_model=Exercise)
+async def create_exercise(exercise_data: ExerciseCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    exercise_obj = Exercise(**exercise_data.dict())
+    await database.exercises.insert_one(exercise_obj.dict())
+    return exercise_obj
+
+@api_router.get("/exercises", response_model=List[Exercise])
+async def get_exercises(category: Optional[str] = None, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    query = {"category": category} if category else {}
+    exercises = await database.exercises.find(query).to_list(2000)
+    return [Exercise(**{k: v for k, v in e.items() if k != "_id"}) for e in exercises]
+
+@api_router.get("/exercises/{exercise_id}", response_model=Exercise)
+async def get_exercise(exercise_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    exercise = await database.exercises.find_one({"id": exercise_id})
+    if not exercise:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    return Exercise(**{k: v for k, v in exercise.items() if k != "_id"})
+
+@api_router.put("/exercises/{exercise_id}", response_model=Exercise)
+async def update_exercise(exercise_id: str, exercise_data: ExerciseUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    update_data = {k: v for k, v in exercise_data.dict().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+
+    result = await database.exercises.update_one({"id": exercise_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+
+    updated_exercise = await database.exercises.find_one({"id": exercise_id})
+    return Exercise(**{k: v for k, v in updated_exercise.items() if k != "_id"})
+
+@api_router.delete("/exercises/{exercise_id}")
+async def delete_exercise(exercise_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    result = await database.exercises.delete_one({"id": exercise_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    return {"message": "Exercise deleted successfully"}
 
 # Player Evaluation endpoints
 @api_router.post("/evaluations", response_model=PlayerEvaluation)
@@ -2264,6 +2408,9 @@ async def initialize_data():
             await database.match_participations.create_index("id")
             await database.match_participations.create_index("player_id")
             await database.match_participations.create_index("match_id")
+            await database.exercise_categories.create_index("id")
+            await database.exercises.create_index("id")
+            await database.exercises.create_index("category")
             logger.info("Index MongoDB vérifiés/créés avec succès")
         except Exception as e:
             logger.error("Erreur lors de la création des index: %s", e)
@@ -2330,6 +2477,20 @@ async def initialize_data():
             await database.coaches.insert_many(default_coaches)
             logger.info("Coaches initialisés avec succès")
 
+        # Check if exercise categories already exist (catégories de départ, librement modifiables ensuite)
+        existing_categories = await database.exercise_categories.count_documents({})
+        if existing_categories == 0:
+            default_category_names = [
+                "Warm-Up", "Défense", "Tir", "Finition", "Dribble",
+                "Passe", "Physique", "Pré-collectif", "Collectif"
+            ]
+            default_categories = [
+                {"id": str(uuid.uuid4()), "name": name, "created_at": datetime.utcnow()}
+                for name in default_category_names
+            ]
+            await database.exercise_categories.insert_many(default_categories)
+            logger.info("Catégories d'exercices initialisées avec succès")
+
         # Update theme names in existing sessions
         try:
             await database.sessions.update_many(
@@ -2362,4 +2523,3 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     logger.info("Shutdown complete")
-    
