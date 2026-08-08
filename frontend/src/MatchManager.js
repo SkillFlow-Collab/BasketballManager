@@ -73,14 +73,26 @@ const MatchManager = () => {
       const response = await axios.get(`${API}/match-participations/match/${matchId}`);
       setMatchParticipations(response.data);
       
-      // Initialize play time inputs
-      const initialPlayTimeInputs = {};
+      // Valeurs de temps de jeu telles qu'enregistrées côté serveur
+      const serverPlayTimeInputs = {};
       response.data.forEach(mp => {
         if (mp.participation.play_time !== null) {
-          initialPlayTimeInputs[mp.player.id] = mp.participation.play_time;
+          serverPlayTimeInputs[mp.player.id] = mp.participation.play_time;
         }
       });
-      setPlayTimeInputs(initialPlayTimeInputs);
+
+      // On fusionne avec les valeurs déjà saisies localement (pas encore enregistrées),
+      // pour ne jamais écraser ce que le coach vient de taper quand un autre champ
+      // (présence, titulaire...) déclenche un rechargement des données.
+      setPlayTimeInputs(prev => {
+        const merged = { ...serverPlayTimeInputs };
+        Object.keys(prev).forEach(playerId => {
+          if (prev[playerId] !== undefined && prev[playerId] !== '') {
+            merged[playerId] = prev[playerId];
+          }
+        });
+        return merged;
+      });
     } catch (error) {
       console.error('Erreur lors du chargement des participations:', error);
     }
