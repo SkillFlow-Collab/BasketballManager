@@ -134,14 +134,51 @@ const ExerciseLibrary = () => {
     setSelectedExercise(null);
   };
 
-  const handleDiagramChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+  // Redimensionne et compresse l'image côté navigateur avant de l'envoyer,
+  // pour ne jamais dépasser la limite de taille de requête de l'hébergement
+  // (les photos prises avec un téléphone peuvent faire plusieurs Mo).
+  const compressImage = (file, maxDimension = 1280, quality = 0.75) => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setExerciseForm(prev => ({ ...prev, diagram: reader.result }));
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            } else {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = event.target.result;
       };
+      reader.onerror = reject;
       reader.readAsDataURL(file);
+    });
+  };
+
+  const handleDiagramChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const compressedDataUrl = await compressImage(file);
+      setExerciseForm(prev => ({ ...prev, diagram: compressedDataUrl }));
+    } catch (error) {
+      console.error("Erreur lors du traitement de l'image:", error);
+      alert("Cette image n'a pas pu être traitée. Essaie avec une autre photo.");
     }
   };
 
@@ -227,7 +264,7 @@ const ExerciseLibrary = () => {
               <h3 className="font-bold text-gray-800">Catégories</h3>
               <button
                 onClick={() => setShowCategoryForm(!showCategoryForm)}
-                className="text-blue-600 hover:text-blue-800 text-sm font-semibold"
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-semibold px-3 py-1.5 rounded-lg border border-blue-200"
               >
                 + Ajouter
               </button>
