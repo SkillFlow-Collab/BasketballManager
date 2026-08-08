@@ -386,29 +386,44 @@ const ExerciseLibrary = () => {
                 <div
                   key={exercise.id}
                   onClick={() => setSelectedExercise(exercise)}
-                  className="bg-white rounded-2xl shadow-lg p-5 cursor-pointer hover:shadow-xl transition-shadow"
+                  className="bg-white rounded-2xl shadow-lg p-5 cursor-pointer hover:shadow-xl transition-shadow flex gap-4"
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-bold text-gray-800">{exercise.name}</h4>
-                    {exercise.duration_minutes ? (
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full whitespace-nowrap ml-2">
-                        {exercise.duration_minutes} min
+                  {/* Miniature du schéma */}
+                  {exercise.diagram ? (
+                    <img
+                      src={exercise.diagram}
+                      alt={`Schéma - ${exercise.name}`}
+                      className="w-20 h-20 object-cover rounded-xl border border-gray-200 flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-xl bg-gray-50 border border-dashed border-gray-200 flex items-center justify-center flex-shrink-0 text-2xl text-gray-300">
+                      🏀
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-bold text-gray-800">{exercise.name}</h4>
+                      {exercise.duration_minutes ? (
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full whitespace-nowrap ml-2">
+                          {exercise.duration_minutes} min
+                        </span>
+                      ) : null}
+                    </div>
+                    {exercise.category && (
+                      <span className="inline-block text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full mb-2 mr-1">
+                        {exercise.category}
                       </span>
-                    ) : null}
+                    )}
+                    {(exercise.positions || []).map(pos => (
+                      <span key={pos} className="inline-block text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full mb-2 mr-1">
+                        {pos}
+                      </span>
+                    ))}
+                    {exercise.objective && (
+                      <p className="text-gray-600 text-sm line-clamp-2">{exercise.objective}</p>
+                    )}
                   </div>
-                  {exercise.category && (
-                    <span className="inline-block text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full mb-2 mr-1">
-                      {exercise.category}
-                    </span>
-                  )}
-                  {(exercise.positions || []).map(pos => (
-                    <span key={pos} className="inline-block text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full mb-2 mr-1">
-                      {pos}
-                    </span>
-                  ))}
-                  {exercise.objective && (
-                    <p className="text-gray-600 text-sm line-clamp-2">{exercise.objective}</p>
-                  )}
                 </div>
               ))}
             </div>
