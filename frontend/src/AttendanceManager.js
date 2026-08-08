@@ -18,6 +18,7 @@ const AttendanceManager = () => {
   const [activeTab, setActiveTab] = useState('calendar');
   const [collectiveSessions, setCollectiveSessions] = useState([]);
   const [players, setPlayers] = useState([]);
+  const [exercises, setExercises] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -37,12 +38,14 @@ const AttendanceManager = () => {
     session_time: '19:00',
     location: 'Gymnase Gaston Neveur',
     coach: '',
-    notes: ''
+    notes: '',
+    exercise_ids: []
   });
 
   useEffect(() => {
     fetchPlayers();
     fetchCollectiveSessions();
+    fetchExercises();
   }, [selectedMonth, selectedYear]);
 
   // Initialize default attendances when players are loaded and we're creating a new session
@@ -59,6 +62,20 @@ const AttendanceManager = () => {
     } catch (error) {
       console.error('Erreur lors du chargement des joueurs:', error);
     }
+  };
+
+  const fetchExercises = async () => {
+    try {
+      const response = await axios.get(`${API}/exercises`);
+      setExercises(response.data);
+    } catch (error) {
+      console.error('Erreur lors du chargement des exercices:', error);
+    }
+  };
+
+  const getExerciseNames = (exerciseIds) => {
+    if (!exerciseIds || exerciseIds.length === 0) return [];
+    return exerciseIds.map(id => exercises.find(ex => ex.id === id)?.name).filter(Boolean);
   };
 
   const fetchCollectiveSessions = async () => {
@@ -132,7 +149,8 @@ const AttendanceManager = () => {
         session_time: '19:00',
         location: 'Gymnase Gaston Neveur',
         coach: '',
-        notes: ''
+        notes: '',
+        exercise_ids: []
       });
       setNewSessionAttendances({});
       
@@ -350,7 +368,8 @@ const AttendanceManager = () => {
       session_time: session.session_time,
       location: session.location || '',
       coach: session.coach || '',
-      notes: session.notes || ''
+      notes: session.notes || '',
+      exercise_ids: session.exercise_ids || []
     });
 
     const handleSubmit = (e) => {
@@ -430,6 +449,39 @@ const AttendanceManager = () => {
             rows="2"
             placeholder="Informations complémentaires..."
           />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-blue-700 mb-2">Exercices de la séance (optionnel)</label>
+          {exercises.length === 0 ? (
+            <p className="text-sm text-blue-600 border border-blue-300 rounded-xl p-3 bg-white">
+              Aucun exercice dans ta bibliothèque pour l'instant.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-blue-300 rounded-xl p-3 bg-white">
+              {exercises.map(exercise => (
+                <label key={exercise.id} className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={(formData.exercise_ids || []).includes(exercise.id)}
+                    onChange={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        exercise_ids: (prev.exercise_ids || []).includes(exercise.id)
+                          ? prev.exercise_ids.filter(id => id !== exercise.id)
+                          : [...(prev.exercise_ids || []), exercise.id]
+                      }));
+                    }}
+                    className="rounded text-blue-600"
+                  />
+                  <span className="text-sm">
+                    {exercise.name}
+                    {exercise.category && <span className="text-gray-400"> · {exercise.category}</span>}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex space-x-3">
@@ -603,6 +655,17 @@ const AttendanceManager = () => {
               <div className="mb-6 p-4 bg-blue-50 rounded-xl">
                 <span className="text-sm text-blue-600 font-medium">Notes:</span>
                 <p className="text-blue-800">{selectedSession.notes}</p>
+              </div>
+            )}
+
+            {getExerciseNames(selectedSession.exercise_ids).length > 0 && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-xl">
+                <span className="text-sm text-gray-600 font-medium">Exercices de la séance :</span>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {getExerciseNames(selectedSession.exercise_ids).map((name, i) => (
+                    <span key={i} className="bg-blue-50 text-blue-700 px-2 py-1 rounded-full text-sm">{name}</span>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -787,6 +850,41 @@ const AttendanceManager = () => {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Exercices de la séance (optionnel)
+                </label>
+                {exercises.length === 0 ? (
+                  <p className="text-sm text-gray-500 border rounded-xl p-3">
+                    Aucun exercice dans ta bibliothèque pour l'instant. Ajoutes-en depuis l'onglet "Exercices".
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-xl p-3">
+                    {exercises.map(exercise => (
+                      <label key={exercise.id} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={(sessionFormData.exercise_ids || []).includes(exercise.id)}
+                          onChange={() => {
+                            setSessionFormData(prev => ({
+                              ...prev,
+                              exercise_ids: (prev.exercise_ids || []).includes(exercise.id)
+                                ? prev.exercise_ids.filter(id => id !== exercise.id)
+                                : [...(prev.exercise_ids || []), exercise.id]
+                            }));
+                          }}
+                          className="rounded text-blue-600"
+                        />
+                        <span className="text-sm">
+                          {exercise.name}
+                          {exercise.category && <span className="text-gray-400"> · {exercise.category}</span>}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Attendance Section */}
               <div className="border-t pt-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Marquer les présences directement</h3>
@@ -871,7 +969,8 @@ const AttendanceManager = () => {
                       session_time: '19:00',
                       location: 'Gymnase Gaston Neveur',
                       coach: '',
-                      notes: ''
+                      notes: '',
+                      exercise_ids: []
                     });
                     setNewSessionAttendances({});
                   }}
