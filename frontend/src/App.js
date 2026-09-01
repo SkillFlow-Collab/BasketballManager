@@ -318,7 +318,7 @@ const ChangePassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-yellow-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#eaf7f9] to-[#d3eef2] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Changement de mot de passe requis</h1>
@@ -340,7 +340,7 @@ const ChangePassword = () => {
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+              className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#45bbc9] focus:border-transparent"
               required
             />
           </div>
@@ -353,7 +353,7 @@ const ChangePassword = () => {
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+              className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#45bbc9] focus:border-transparent"
               required
               minLength={6}
             />
@@ -367,7 +367,7 @@ const ChangePassword = () => {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+              className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#45bbc9] focus:border-transparent"
               required
               minLength={6}
             />
@@ -376,7 +376,7 @@ const ChangePassword = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-3 rounded-xl transition-colors font-medium disabled:opacity-50"
+            className="w-full bg-[#45bbc9] hover:bg-[#379aa8] text-white py-3 rounded-xl transition-colors font-medium disabled:opacity-50"
           >
             {loading ? 'Changement en cours...' : 'Changer le mot de passe'}
           </button>
@@ -577,7 +577,7 @@ const Navigation = () => {
   };
 
   return (
-    <nav className="bg-gray-900 shadow-lg border-b-2 border-yellow-400">
+    <nav className="bg-gray-900 shadow-lg border-b-2 border-[#45bbc9]">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center h-20">
           <div className="flex items-center space-x-3 -ml-2">
@@ -2293,7 +2293,8 @@ const SessionsList = () => {
     trainers: [],
     content_details: '',
     notes: '',
-    exercise_ids: []
+    exercise_ids: [],
+    is_mandatory: true
   });
 
   useEffect(() => {
@@ -2349,7 +2350,8 @@ const SessionsList = () => {
         trainers: [],
         content_details: '',
         notes: '',
-        exercise_ids: []
+        exercise_ids: [],
+        is_mandatory: true
       });
       fetchSessions();
     } catch (error) {
@@ -2366,7 +2368,8 @@ const SessionsList = () => {
       trainers: session.trainers || [],
       content_details: session.content_details || '',
       notes: session.notes || '',
-      exercise_ids: session.exercise_ids || []
+      exercise_ids: session.exercise_ids || [],
+      is_mandatory: session.is_mandatory !== undefined ? session.is_mandatory : true
     });
     setShowForm(true);
   };
@@ -2502,6 +2505,35 @@ const SessionsList = () => {
                 required
               />
 
+              {/* Séance obligatoire ou facultative */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Type de séance</label>
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, is_mandatory: true })}
+                    className={`flex-1 py-2 rounded-xl font-medium text-sm transition-colors border ${
+                      formData.is_mandatory
+                        ? 'bg-blue-500 text-white border-blue-500'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    Obligatoire
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, is_mandatory: false })}
+                    className={`flex-1 py-2 rounded-xl font-medium text-sm transition-colors border ${
+                      !formData.is_mandatory
+                        ? 'bg-purple-500 text-white border-purple-500'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    Facultative (demandée en plus)
+                  </button>
+                </div>
+              </div>
+
               {/* Sélection des thèmes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Thèmes (sélection multiple)</label>
@@ -2624,6 +2656,13 @@ const SessionsList = () => {
                   {getPlayerNames(session.player_ids || [])}
                 </h3>
                 <p className="text-blue-600 font-medium">{session.themes?.join(', ') || 'Séance'}</p>
+                <span className={`inline-block mt-1 text-xs px-2 py-1 rounded-full font-medium ${
+                  session.is_mandatory === false
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {session.is_mandatory === false ? 'Facultative' : 'Obligatoire'}
+                </span>
               </div>
               <div className="flex items-start space-x-4">
                 <div className="text-right">
@@ -3524,6 +3563,12 @@ const Admin = () => {
   const [confirmationMessage, setConfirmationMessage] = useState('');
   const { user: currentUser } = useAuth(); // Get current user for comparison
 
+  // Réinitialisation "nouvelle saison"
+  const [showResetForm, setShowResetForm] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [resetResult, setResetResult] = useState(null);
+
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -3578,6 +3623,25 @@ const Admin = () => {
         setShowConfirmation(true);
         setTimeout(() => setShowConfirmation(false), 3000);
       }
+    }
+  };
+
+  const handleResetNewSeason = async () => {
+    if (resetConfirmText !== 'SUPPRIMER') return;
+    setResetting(true);
+    setResetResult(null);
+    try {
+      const response = await axios.post(`${API}/admin/reset-new-season`, { confirm: 'SUPPRIMER' });
+      setResetResult({ success: true, data: response.data });
+      setResetConfirmText('');
+      setShowResetForm(false);
+    } catch (error) {
+      setResetResult({
+        success: false,
+        message: error.response?.data?.detail || 'Erreur inconnue lors de la réinitialisation.'
+      });
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -3716,6 +3780,75 @@ const Admin = () => {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Zone dangereuse : réinitialisation pour une nouvelle saison */}
+      <div className="mt-10 bg-red-50 border-2 border-red-200 rounded-2xl p-6">
+        <h3 className="text-lg font-bold text-red-800 mb-2">⚠️ Zone dangereuse</h3>
+        <p className="text-red-700 text-sm mb-4">
+          Repartir de zéro pour une nouvelle équipe / nouvelle saison. Cette action supprime
+          définitivement : les joueurs, les coachs, les séances individuelles et collectives,
+          les évaluations, les présences et les matchs.
+          <br />
+          <strong>La bibliothèque d'exercices et les comptes utilisateurs sont conservés.</strong>
+          <br />
+          Cette action est <strong>irréversible</strong>.
+        </p>
+
+        {resetResult && (
+          <div className={`mb-4 p-4 rounded-xl text-sm ${resetResult.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+            {resetResult.success ? (
+              <>
+                ✅ Réinitialisation effectuée.
+                <ul className="list-disc list-inside mt-1">
+                  {Object.entries(resetResult.data.deleted_counts).map(([key, count]) => (
+                    <li key={key}>{key} : {count} supprimé(s)</li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <>❌ {resetResult.message}</>
+            )}
+          </div>
+        )}
+
+        {!showResetForm ? (
+          <button
+            onClick={() => setShowResetForm(true)}
+            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl transition-colors font-semibold"
+          >
+            Réinitialiser pour une nouvelle saison
+          </button>
+        ) : (
+          <div className="bg-white border border-red-300 rounded-xl p-4">
+            <p className="text-gray-700 text-sm mb-3">
+              Pour confirmer, tape <strong>SUPPRIMER</strong> dans le champ ci-dessous :
+            </p>
+            <input
+              type="text"
+              value={resetConfirmText}
+              onChange={(e) => setResetConfirmText(e.target.value)}
+              placeholder="SUPPRIMER"
+              className="w-full p-3 border border-red-300 rounded-xl mb-3 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+            />
+            <div className="flex space-x-3">
+              <button
+                onClick={() => { setShowResetForm(false); setResetConfirmText(''); }}
+                disabled={resetting}
+                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 rounded-xl transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleResetNewSeason}
+                disabled={resetConfirmText !== 'SUPPRIMER' || resetting}
+                className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-200 disabled:cursor-not-allowed text-white py-2 rounded-xl transition-colors font-semibold"
+              >
+                {resetting ? 'Suppression en cours...' : 'Confirmer la suppression définitive'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
