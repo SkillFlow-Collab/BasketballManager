@@ -1100,33 +1100,27 @@ const ReportsWithEvaluation = () => {
                 <div className="bg-white rounded-2xl shadow-lg p-6">
                   <h3 className="text-xl font-bold text-gray-800 mb-6">Suivi des matchs</h3>
                   
-                  {/* Match Statistics Summary - Simplified with separate U18/U21 averages */}
+                  {/* Match Statistics Summary - s'adapte automatiquement aux équipes existantes */}
                   <div className="p-4 bg-gray-100 rounded-xl">
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {playerReport.match_stats.team_breakdown.U18?.played || 0}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      {Object.entries(playerReport.match_stats.team_breakdown || {}).map(([teamName, breakdown]) => (
+                        <div key={teamName} className="text-center">
+                          <div className="text-2xl font-bold text-blue-600">
+                            {breakdown.played || 0}
+                          </div>
+                          <div className="text-gray-600">Matchs {teamName} joués</div>
                         </div>
-                        <div className="text-gray-600">Matchs U18 joués</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-purple-600">
-                          {playerReport.match_stats.team_breakdown.U21?.played || 0}
-                        </div>
-                        <div className="text-gray-600">Matchs U21 joués</div>
-                      </div>
+                      ))}
                       <div className="text-center">
                         <div className="text-2xl font-bold text-green-600">{playerReport.match_stats.matches_started}</div>
                         <div className="text-gray-600">5 de départ</div>
                       </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-orange-600">{playerReport.match_stats.average_play_time_u18 || 0}</div>
-                        <div className="text-gray-600">Moy. min U18</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-red-600">{playerReport.match_stats.average_play_time_u21 || 0}</div>
-                        <div className="text-gray-600">Moy. min U21</div>
-                      </div>
+                      {Object.entries(playerReport.match_stats.average_play_time_by_team || {}).map(([teamName, avg]) => (
+                        <div key={teamName} className="text-center">
+                          <div className="text-2xl font-bold text-orange-600">{avg || 0}</div>
+                          <div className="text-gray-600">Moy. min {teamName}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
