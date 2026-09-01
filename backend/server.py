@@ -233,6 +233,7 @@ class Session(BaseModel):
     notes: Optional[str] = None
     exercise_ids: Optional[List[str]] = Field(default_factory=list)  # Exercices de la bibliothèque liés à la séance
     is_mandatory: bool = True  # Séance obligatoire (True) ou facultative / demandée en plus (False)
+    duration_minutes: Optional[int] = None  # Durée de la séance en minutes
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class SessionCreate(BaseModel):
@@ -244,6 +245,7 @@ class SessionCreate(BaseModel):
     notes: Optional[str] = None
     exercise_ids: Optional[List[str]] = Field(default_factory=list)
     is_mandatory: bool = True
+    duration_minutes: Optional[int] = None
 
 class SessionUpdate(BaseModel):
     session_date: Optional[date] = None
@@ -254,12 +256,17 @@ class SessionUpdate(BaseModel):
     notes: Optional[str] = None
     exercise_ids: Optional[List[str]] = None
     is_mandatory: Optional[bool] = None
+    duration_minutes: Optional[int] = None
 
 class PlayerReport(BaseModel):
     player: Player
     total_sessions: int
     mandatory_sessions: int = 0  # Nombre de séances obligatoires suivies
     optional_sessions: int = 0  # Nombre de séances facultatives / demandées en plus
+    total_duration_minutes: int = 0  # Durée totale de travail individuel (minutes)
+    mandatory_duration_minutes: int = 0  # Durée totale des séances obligatoires
+    optional_duration_minutes: int = 0  # Durée totale des séances facultatives
+    duration_by_theme: dict = Field(default_factory=dict)  # Durée cumulée par thème (minutes)
     content_breakdown: dict
     trainer_breakdown: dict
     recent_sessions: List[Session]
@@ -1962,11 +1969,19 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
     
     # Theme breakdown (using converted session objects)
     content_breakdown = {}
+    duration_by_theme = {}
     for session_obj in session_objects:
         themes = session_obj.themes or []
         for theme in themes:
             if theme.strip():  # Ignore empty themes
                 content_breakdown[theme] = content_breakdown.get(theme, 0) + 1
+                if session_obj.duration_minutes:
+                    duration_by_theme[theme] = duration_by_theme.get(theme, 0) + session_obj.duration_minutes
+
+    # Durée totale (uniquement les séances où la durée a été renseignée)
+    total_duration_minutes = sum(s.duration_minutes for s in session_objects if s.duration_minutes)
+    mandatory_duration_minutes = sum(s.duration_minutes for s in session_objects if s.duration_minutes and s.is_mandatory)
+    optional_duration_minutes = sum(s.duration_minutes for s in session_objects if s.duration_minutes and not s.is_mandatory)
     
     # Trainer breakdown (using converted session objects)
     trainer_breakdown = {}
@@ -2060,6 +2075,10 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
         total_sessions=total_sessions,
         mandatory_sessions=mandatory_sessions,
         optional_sessions=optional_sessions,
+        total_duration_minutes=total_duration_minutes,
+        mandatory_duration_minutes=mandatory_duration_minutes,
+        optional_duration_minutes=optional_duration_minutes,
+        duration_by_theme=duration_by_theme,
         content_breakdown=content_breakdown,
         trainer_breakdown=trainer_breakdown,
         recent_sessions=recent_sessions,
