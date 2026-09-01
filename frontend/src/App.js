@@ -2294,7 +2294,8 @@ const SessionsList = () => {
     content_details: '',
     notes: '',
     exercise_ids: [],
-    is_mandatory: true
+    is_mandatory: true,
+    duration_minutes: ''
   });
 
   useEffect(() => {
@@ -2333,11 +2334,15 @@ const SessionsList = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...formData,
+        duration_minutes: formData.duration_minutes !== '' ? parseInt(formData.duration_minutes, 10) : null
+      };
       if (editingSession) {
-        await axios.put(`${API}/sessions/${editingSession.id}`, formData);
+        await axios.put(`${API}/sessions/${editingSession.id}`, payload);
         setShowConfirmation(false);
       } else {
-        await axios.post(`${API}/sessions`, formData);
+        await axios.post(`${API}/sessions`, payload);
         setShowConfirmation(true);
         setTimeout(() => setShowConfirmation(false), 3000); // Hide after 3 seconds
       }
@@ -2351,7 +2356,8 @@ const SessionsList = () => {
         content_details: '',
         notes: '',
         exercise_ids: [],
-        is_mandatory: true
+        is_mandatory: true,
+        duration_minutes: ''
       });
       fetchSessions();
     } catch (error) {
@@ -2369,7 +2375,8 @@ const SessionsList = () => {
       content_details: session.content_details || '',
       notes: session.notes || '',
       exercise_ids: session.exercise_ids || [],
-      is_mandatory: session.is_mandatory !== undefined ? session.is_mandatory : true
+      is_mandatory: session.is_mandatory !== undefined ? session.is_mandatory : true,
+      duration_minutes: session.duration_minutes ?? ''
     });
     setShowForm(true);
   };
@@ -2505,32 +2512,29 @@ const SessionsList = () => {
                 required
               />
 
-              {/* Séance obligatoire ou facultative */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Type de séance</label>
-                <div className="flex space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, is_mandatory: true })}
-                    className={`flex-1 py-2 rounded-xl font-medium text-sm transition-colors border ${
-                      formData.is_mandatory
-                        ? 'bg-blue-500 text-white border-blue-500'
-                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    Obligatoire
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, is_mandatory: false })}
-                    className={`flex-1 py-2 rounded-xl font-medium text-sm transition-colors border ${
-                      !formData.is_mandatory
-                        ? 'bg-purple-500 text-white border-purple-500'
-                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    Facultative (demandée en plus)
-                  </button>
+              {/* Séance facultative + durée */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Durée de la séance (minutes)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.duration_minutes}
+                    onChange={(e) => setFormData({ ...formData, duration_minutes: e.target.value })}
+                    placeholder="Ex : 60"
+                    className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="flex items-end pb-3">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={!formData.is_mandatory}
+                      onChange={(e) => setFormData({ ...formData, is_mandatory: !e.target.checked })}
+                      className="rounded text-blue-600"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Séance facultative (demandée en plus)</span>
+                  </label>
                 </div>
               </div>
 
@@ -2667,6 +2671,9 @@ const SessionsList = () => {
               <div className="flex items-start space-x-4">
                 <div className="text-right">
                   <p className="text-gray-600">{new Date(session.session_date).toLocaleDateString('fr-FR')}</p>
+                  {session.duration_minutes ? (
+                    <p className="text-gray-500 text-sm">{session.duration_minutes} min</p>
+                  ) : null}
                   <p className="text-gray-500 text-sm">Entraîneurs: {session.trainers?.join(', ') || 'N/A'}</p>
                 </div>
                 <div className="flex flex-col space-y-2">
