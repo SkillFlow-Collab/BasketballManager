@@ -4,7 +4,7 @@ import axios from 'axios';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const TEAM_TYPES = ['U18', 'U21'];
+const TEAM_TYPES = ['Partenaire'];
 
 const MatchManager = () => {
   const [matches, setMatches] = useState([]);
@@ -21,7 +21,7 @@ const MatchManager = () => {
   const [confirmationMessage, setConfirmationMessage] = useState('');
 
   const [matchFormData, setMatchFormData] = useState({
-    team: 'U18',
+    team: 'Partenaire',
     opponent: '',
     match_date: '',
     match_time: '15:00',
@@ -128,7 +128,7 @@ const MatchManager = () => {
       
       // Reset form
       setMatchFormData({
-        team: 'U18',
+        team: 'Partenaire',
         opponent: '',
         match_date: '',
         match_time: '15:00',
@@ -264,8 +264,8 @@ const MatchManager = () => {
 
   const getTeamColor = (team) => {
     switch (team) {
-      case 'U18': return 'bg-blue-500';
-      case 'U21': return 'bg-purple-500';
+      case 'Partenaire': return 'bg-purple-500';
+      case 'Pro': return 'bg-blue-500';
       default: return 'bg-gray-500';
     }
   };
