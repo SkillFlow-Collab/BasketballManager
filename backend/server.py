@@ -173,8 +173,7 @@ class ChangePasswordRequest(BaseModel):
 
 # TeamType enum for player and match models
 class TeamType(str, Enum):
-    U18 = "U18"
-    U21 = "U21"
+    Partenaire = "Partenaire"
     Pro = "Pro"
 
 class StatObjective(BaseModel):
@@ -348,7 +347,7 @@ class EvaluationUpdate(BaseModel):
 # Collective Session and Attendance Models
 class CollectiveSession(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    session_type: str  # U18, U21, CDF, Musculation
+    session_type: str  # Partenaire, Pro, CDF, Musculation
     session_date: date
     session_time: str  # e.g., "19:00"
     location: Optional[str] = None
@@ -453,7 +452,7 @@ class ExerciseUpdate(BaseModel):
 
 class Match(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    team: TeamType  # U18 or U21
+    team: TeamType  # Partenaire or Pro
     opponent: str
     match_date: date
     match_time: str  # e.g., "15:00"
@@ -2002,21 +2001,19 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
         "matches_started": len([p for p in match_participations if p["is_present"] and p["is_starter"]]),
         "total_play_time": sum([p.get("play_time", 0) for p in match_participations if p["is_present"] and p.get("play_time")]),
         "average_play_time": 0,
-        "average_play_time_u18": 0,
-        "average_play_time_u21": 0,
+        "average_play_time_by_team": {},  # Moyenne de temps de jeu par équipe (générique, quelle que soit l'équipe)
         "team_breakdown": {},
         "recent_matches": []
     }
     
     # Calculate average play time (global and by team)
     played_matches = [p for p in match_participations if p["is_present"] and p.get("play_time")]
-    u18_play_times = []
-    u21_play_times = []
+    play_times_by_team = {}
     
     if played_matches:
         match_stats["average_play_time"] = round(sum([p["play_time"] for p in played_matches]) / len(played_matches), 1)
     
-    # Get match details for team breakdown and separate U18/U21 averages
+    # Get match details for team breakdown and per-team averages
     # (une seule requête groupée au lieu d'une requête par match, pour aller plus vite)
     match_ids = list({p["match_id"] for p in match_participations if p.get("match_id")})
     matches_by_id = {}
@@ -2043,12 +2040,9 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
                 if participation["is_starter"]:
                     match_stats["team_breakdown"][team]["started"] += 1
                 
-                # Collect play times by team for separate averages
+                # Collect play times by team for per-team averages
                 if participation.get("play_time"):
-                    if team == "U18":
-                        u18_play_times.append(participation["play_time"])
-                    elif team == "U21":
-                        u21_play_times.append(participation["play_time"])
+                    play_times_by_team.setdefault(team, []).append(participation["play_time"])
             
             # Recent matches (last 5)
             if len(match_stats["recent_matches"]) < 5:
@@ -2057,12 +2051,9 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
                     "participation": MatchParticipation(**participation)
                 })
     
-    # Calculate separate averages for U18 and U21
-    if u18_play_times:
-        match_stats["average_play_time_u18"] = round(sum(u18_play_times) / len(u18_play_times), 1)
-    
-    if u21_play_times:
-        match_stats["average_play_time_u21"] = round(sum(u21_play_times) / len(u21_play_times), 1)
+    # Calculate per-team averages
+    for team, play_times in play_times_by_team.items():
+        match_stats["average_play_time_by_team"][team] = round(sum(play_times) / len(play_times), 1)
     # Sort recent matches by date
     match_stats["recent_matches"] = sorted(
         match_stats["recent_matches"], 
