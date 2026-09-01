@@ -688,6 +688,11 @@ const ReportsWithEvaluation = () => {
                   <div className="bg-blue-50 p-4 rounded-xl">
                     <h3 className="text-lg font-semibold text-blue-800 mb-2">Total Séances</h3>
                     <p className="text-3xl font-bold text-blue-600">{playerReport.total_sessions}</p>
+                    {(playerReport.mandatory_sessions !== undefined) && (
+                      <p className="text-xs text-blue-500 mt-1">
+                        {playerReport.mandatory_sessions} obligatoire{playerReport.mandatory_sessions > 1 ? 's' : ''} · {playerReport.optional_sessions} facultative{playerReport.optional_sessions > 1 ? 's' : ''}
+                      </p>
+                    )}
                   </div>
                   <div className="bg-green-50 p-4 rounded-xl">
                     <h3 className="text-lg font-semibold text-green-800 mb-2">Thèmes Travaillés</h3>
@@ -1165,6 +1170,13 @@ const ReportsWithEvaluation = () => {
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="font-semibold text-gray-800">{session.themes?.join(', ') || 'Séance'}</p>
+                          <span className={`inline-block mt-1 mb-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                            session.is_mandatory === false
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {session.is_mandatory === false ? 'Facultative' : 'Obligatoire'}
+                          </span>
                           <p className="text-gray-600 text-sm">{session.content_details}</p>
                         </div>
                         <div className="text-right">
