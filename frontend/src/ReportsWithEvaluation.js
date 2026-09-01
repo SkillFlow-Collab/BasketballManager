@@ -17,6 +17,17 @@ import { exportPlayerReport, exportCoachReport } from './PdfExportUtils';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+// Formate une durée en minutes en "Xh Ymin" (ou "Ymin" si moins d'une heure)
+const formatDuration = (totalMinutes) => {
+  const minutes = totalMinutes || 0;
+  if (minutes <= 0) return '0 min';
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours === 0) return `${remainingMinutes} min`;
+  if (remainingMinutes === 0) return `${hours}h`;
+  return `${hours}h ${remainingMinutes}min`;
+};
+
 // Register ChartJS components and plugins
 ChartJS.register(
   RadialLinearScale,
@@ -684,13 +695,22 @@ const ReportsWithEvaluation = () => {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                   <div className="bg-blue-50 p-4 rounded-xl">
                     <h3 className="text-lg font-semibold text-blue-800 mb-2">Total Séances</h3>
                     <p className="text-3xl font-bold text-blue-600">{playerReport.total_sessions}</p>
                     {(playerReport.mandatory_sessions !== undefined) && (
                       <p className="text-xs text-blue-500 mt-1">
                         {playerReport.mandatory_sessions} obligatoire{playerReport.mandatory_sessions > 1 ? 's' : ''} · {playerReport.optional_sessions} facultative{playerReport.optional_sessions > 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
+                  <div className="bg-teal-50 p-4 rounded-xl">
+                    <h3 className="text-lg font-semibold text-teal-800 mb-2">Durée de travail</h3>
+                    <p className="text-3xl font-bold text-teal-600">{formatDuration(playerReport.total_duration_minutes)}</p>
+                    {(playerReport.total_duration_minutes > 0) && (
+                      <p className="text-xs text-teal-500 mt-1">
+                        {formatDuration(playerReport.mandatory_duration_minutes)} obligatoire · {formatDuration(playerReport.optional_duration_minutes)} facultative
                       </p>
                     )}
                   </div>
@@ -1042,6 +1062,9 @@ const ReportsWithEvaluation = () => {
                           <span className="font-medium text-gray-700">{theme}</span>
                           <div className="text-right">
                             <span className="font-bold text-blue-600">{count} séances</span>
+                            {playerReport.duration_by_theme?.[theme] ? (
+                              <p className="text-sm text-teal-600">{formatDuration(playerReport.duration_by_theme[theme])}</p>
+                            ) : null}
                             <p className="text-sm text-gray-500">{percentage}%</p>
                           </div>
                         </div>
@@ -1181,6 +1204,9 @@ const ReportsWithEvaluation = () => {
                         </div>
                         <div className="text-right">
                           <p className="text-gray-600">{new Date(session.session_date).toLocaleDateString('fr-FR')}</p>
+                          {session.duration_minutes ? (
+                            <p className="text-teal-600 text-sm font-medium">{formatDuration(session.duration_minutes)}</p>
+                          ) : null}
                           <p className="text-gray-500 text-sm">Entraîneurs: {session.trainers?.join(', ') || 'N/A'}</p>
                         </div>
                       </div>
