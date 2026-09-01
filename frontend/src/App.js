@@ -60,15 +60,6 @@ const THEMES = [
   '1v1'
 ];
 
-const ENTRAINEURS = [
-  'Loan',
-  'J-E',
-  'David',
-  'Léo',
-  'Mike',
-  'Autre'
-];
-
 // Constantes pour les évaluations
 const EVALUATION_THEMES = [
   {
@@ -2282,6 +2273,7 @@ const SessionsList = () => {
   const [sessions, setSessions] = useState([]);
   const [players, setPlayers] = useState([]);
   const [exercises, setExercises] = useState([]);
+  const [coaches, setCoaches] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
   const [selectedPlayer, setSelectedPlayer] = useState('');
@@ -2302,6 +2294,7 @@ const SessionsList = () => {
     fetchSessions();
     fetchPlayers();
     fetchExercises();
+    fetchCoaches();
   }, []);
 
   const fetchSessions = async () => {
@@ -2328,6 +2321,15 @@ const SessionsList = () => {
       setExercises(response.data);
     } catch (error) {
       console.error('Erreur lors du chargement des exercices:', error);
+    }
+  };
+
+  const fetchCoaches = async () => {
+    try {
+      const response = await axios.get(`${API}/coaches`);
+      setCoaches(response.data);
+    } catch (error) {
+      console.error('Erreur lors du chargement des coachs:', error);
     }
   };
 
@@ -2588,19 +2590,28 @@ const SessionsList = () => {
               {/* Sélection des entraîneurs */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Entraîneurs</label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 border rounded-xl p-3">
-                  {ENTRAINEURS.map(trainer => (
-                    <label key={trainer} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.trainers.includes(trainer)}
-                        onChange={() => handleTrainerChange(trainer)}
-                        className="rounded text-blue-600"
-                      />
-                      <span className="text-sm">{trainer}</span>
-                    </label>
-                  ))}
-                </div>
+                {coaches.length === 0 ? (
+                  <p className="text-sm text-gray-500 border rounded-xl p-3">
+                    Aucun coach enregistré. Ajoutes-en depuis l'onglet "Staff Technique".
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 border rounded-xl p-3">
+                    {coaches.map(coach => {
+                      const trainerName = `${coach.first_name} ${coach.last_name}`.trim();
+                      return (
+                        <label key={coach.id} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.trainers.includes(trainerName)}
+                            onChange={() => handleTrainerChange(trainerName)}
+                            className="rounded text-blue-600"
+                          />
+                          <span className="text-sm">{trainerName}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <textarea
