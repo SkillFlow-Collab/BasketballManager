@@ -1885,8 +1885,7 @@ const Players = React.memo(() => {
                 className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Sélectionner une équipe (optionnel)</option>
-                <option value="U18">U18</option>
-                <option value="U21">U21</option>
+                <option value="Partenaire">Partenaire</option>
                 <option value="Pro">Pro</option>
               </select>
               <select
