@@ -232,6 +232,7 @@ class Session(BaseModel):
     content_details: str  # Detailed content from coaches
     notes: Optional[str] = None
     exercise_ids: Optional[List[str]] = Field(default_factory=list)  # Exercices de la bibliothèque liés à la séance
+    is_mandatory: bool = True  # Séance obligatoire (True) ou facultative / demandée en plus (False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class SessionCreate(BaseModel):
@@ -242,6 +243,7 @@ class SessionCreate(BaseModel):
     content_details: str
     notes: Optional[str] = None
     exercise_ids: Optional[List[str]] = Field(default_factory=list)
+    is_mandatory: bool = True
 
 class SessionUpdate(BaseModel):
     session_date: Optional[date] = None
@@ -251,10 +253,13 @@ class SessionUpdate(BaseModel):
     content_details: Optional[str] = None
     notes: Optional[str] = None
     exercise_ids: Optional[List[str]] = None
+    is_mandatory: Optional[bool] = None
 
 class PlayerReport(BaseModel):
     player: Player
     total_sessions: int
+    mandatory_sessions: int = 0  # Nombre de séances obligatoires suivies
+    optional_sessions: int = 0  # Nombre de séances facultatives / demandées en plus
     content_breakdown: dict
     trainer_breakdown: dict
     recent_sessions: List[Session]
@@ -839,6 +844,46 @@ async def delete_coach(coach_id: str, current_user: User = Depends(get_current_u
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Coach not found")
     return {"message": "Coach deleted successfully"}
+
+# Administration : réinitialisation pour une nouvelle saison / nouvelle équipe
+@api_router.post("/admin/reset-new-season")
+async def reset_new_season(
+    body: dict,
+    current_user: User = Depends(get_admin_user),
+    database = Depends(get_database)
+):
+    """Supprime les données de l'équipe (joueurs, coachs, séances, évaluations,
+    présences, matchs) pour repartir de zéro avec une nouvelle équipe.
+    Conserve TOUJOURS : la bibliothèque d'exercices et les comptes utilisateurs.
+    Nécessite une confirmation explicite pour éviter tout déclenchement accidentel."""
+    if body.get("confirm") != "SUPPRIMER":
+        raise HTTPException(
+            status_code=400,
+            detail="Confirmation manquante. Envoie {'confirm': 'SUPPRIMER'} pour valider cette action irréversible."
+        )
+
+    collections_to_wipe = [
+        "players",
+        "coaches",
+        "sessions",
+        "collective_sessions",
+        "evaluations",
+        "attendances",
+        "matches",
+        "match_participations",
+    ]
+
+    deleted_counts = {}
+    for collection_name in collections_to_wipe:
+        result = await database[collection_name].delete_many({})
+        deleted_counts[collection_name] = result.deleted_count
+
+    logger.info("Réinitialisation nouvelle saison effectuée par %s : %s", current_user.email, deleted_counts)
+
+    return {
+        "message": "Réinitialisation effectuée. Les exercices et les comptes utilisateurs ont été conservés.",
+        "deleted_counts": deleted_counts
+    }
 
 # Exercise Library endpoints (bibliothèque d'exercices)
 @api_router.post("/exercise-categories", response_model=ExerciseCategory)
@@ -1912,6 +1957,8 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
     
     # Calculate statistics
     total_sessions = len(session_objects)
+    mandatory_sessions = sum(1 for s in session_objects if s.is_mandatory)
+    optional_sessions = total_sessions - mandatory_sessions
     
     # Theme breakdown (using converted session objects)
     content_breakdown = {}
@@ -2011,6 +2058,8 @@ async def get_player_report(player_id: str, current_user: User = Depends(get_cur
     return PlayerReport(
         player=Player(**{k: v for k, v in player.items() if k != "_id"}),
         total_sessions=total_sessions,
+        mandatory_sessions=mandatory_sessions,
+        optional_sessions=optional_sessions,
         content_breakdown=content_breakdown,
         trainer_breakdown=trainer_breakdown,
         recent_sessions=recent_sessions,
