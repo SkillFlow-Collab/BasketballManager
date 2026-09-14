@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAuth } from './App';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -23,6 +24,7 @@ const emptyExerciseForm = {
 };
 
 const ExerciseLibrary = () => {
+  const { canEdit } = useAuth();
   const [categories, setCategories] = useState([]);
   const [exercises, setExercises] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('all'); // 'all' ou nom de catégorie
@@ -248,12 +250,14 @@ const ExerciseLibrary = () => {
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-800">📚 Bibliothèque d'exercices</h1>
-        <button
-          onClick={openNewExerciseForm}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl transition-colors font-semibold"
-        >
-          + Nouvel exercice
-        </button>
+        {canEdit && (
+          <button
+            onClick={openNewExerciseForm}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl transition-colors font-semibold"
+          >
+            + Nouvel exercice
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -262,15 +266,17 @@ const ExerciseLibrary = () => {
           <div className="bg-white rounded-2xl shadow-lg p-4">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-bold text-gray-800">Catégories</h3>
-              <button
-                onClick={() => setShowCategoryForm(!showCategoryForm)}
-                className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-semibold px-3 py-1.5 rounded-lg border border-blue-200"
-              >
-                + Ajouter
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => setShowCategoryForm(!showCategoryForm)}
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-semibold px-3 py-1.5 rounded-lg border border-blue-200"
+                >
+                  + Ajouter
+                </button>
+              )}
             </div>
 
-            {showCategoryForm && (
+            {showCategoryForm && canEdit && (
               <form onSubmit={handleAddCategory} className="mb-3 flex space-x-2">
                 <input
                   type="text"
@@ -322,22 +328,24 @@ const ExerciseLibrary = () => {
                         ({exercises.filter(ex => ex.category === cat.name).length})
                       </span>
                     </span>
-                    <span className="hidden group-hover:flex space-x-1">
-                      <button
-                        onClick={() => setEditingCategory({ id: cat.id, name: cat.name })}
-                        className="text-gray-400 hover:text-blue-600 text-xs px-1"
-                        title="Renommer"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCategory(cat)}
-                        className="text-gray-400 hover:text-red-600 text-xs px-1"
-                        title="Supprimer"
-                      >
-                        🗑️
-                      </button>
-                    </span>
+                    {canEdit && (
+                      <span className="hidden group-hover:flex space-x-1">
+                        <button
+                          onClick={() => setEditingCategory({ id: cat.id, name: cat.name })}
+                          className="text-gray-400 hover:text-blue-600 text-xs px-1"
+                          title="Renommer"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCategory(cat)}
+                          className="text-gray-400 hover:text-red-600 text-xs px-1"
+                          title="Supprimer"
+                        >
+                          🗑️
+                        </button>
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -438,18 +446,22 @@ const ExerciseLibrary = () => {
             <div className="flex justify-between items-start mb-4">
               <h2 className="text-2xl font-bold text-gray-800">{selectedExercise.name}</h2>
               <div className="flex space-x-2">
-                <button
-                  onClick={() => openEditExerciseForm(selectedExercise)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm"
-                >
-                  ✏️ Modifier
-                </button>
-                <button
-                  onClick={() => handleDeleteExercise(selectedExercise)}
-                  className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg text-sm"
-                >
-                  🗑️
-                </button>
+                {canEdit && (
+                  <>
+                    <button
+                      onClick={() => openEditExerciseForm(selectedExercise)}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm"
+                    >
+                      ✏️ Modifier
+                    </button>
+                    <button
+                      onClick={() => handleDeleteExercise(selectedExercise)}
+                      className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-2 rounded-lg text-sm"
+                    >
+                      🗑️
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() => setSelectedExercise(null)}
                   className="text-gray-400 hover:text-gray-600 px-2 text-xl"
