@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAuth } from './App';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -15,6 +16,7 @@ const ATTENDANCE_STATUS = {
 };
 
 const AttendanceManager = () => {
+  const { canEdit } = useAuth();
   const [activeTab, setActiveTab] = useState('calendar');
   const [collectiveSessions, setCollectiveSessions] = useState([]);
   const [players, setPlayers] = useState([]);
@@ -275,6 +277,7 @@ const AttendanceManager = () => {
   };
 
   const selectDate = (date) => {
+    if (!canEdit) return; // Lecture seule : pas de création de séance depuis le calendrier
     setSelectedDate(date);
     
     // Always auto-open modal for new session creation when clicking on calendar cell
@@ -601,20 +604,22 @@ const AttendanceManager = () => {
                 Détails de la séance - {new Date(selectedSession.session_date).toLocaleDateString('fr-FR')}
                 <span className="ml-3 text-gray-500 text-sm">({sessionAttendances.length} joueurs)</span>
               </h3>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setEditingSessionDetails(!editingSessionDetails)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg transition-colors"
-                >
-                  {editingSessionDetails ? '❌ Annuler' : '✏️ Modifier'}
-                </button>
-                <button
-                  onClick={() => handleDeleteSession(selectedSession.id)}
-                  className="text-red-500 hover:text-red-700 px-3 py-1 rounded-lg hover:bg-red-50 transition-colors"
-                >
-                  🗑️ Supprimer
-                </button>
-              </div>
+              {canEdit && (
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setEditingSessionDetails(!editingSessionDetails)}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg transition-colors"
+                  >
+                    {editingSessionDetails ? '❌ Annuler' : '✏️ Modifier'}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSession(selectedSession.id)}
+                    className="text-red-500 hover:text-red-700 px-3 py-1 rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    🗑️ Supprimer
+                  </button>
+                </div>
+              )}
             </div>
             
             {/* Session Info - Editable */}
@@ -736,7 +741,8 @@ const AttendanceManager = () => {
                           <button
                             key={status}
                             onClick={() => handleAttendanceChange(player.id, status)}
-                            className={`attendance-button p-3 rounded-lg text-sm font-medium transition-all transform hover:scale-105 border-2 ${
+                            disabled={!canEdit}
+                            className={`attendance-button p-3 rounded-lg text-sm font-medium transition-all transform hover:scale-105 border-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100 ${
                               currentStatus === status
                                 ? ATTENDANCE_STATUS[status].color + ' scale-105 border-2 border-blue-500 shadow-md'
                                 : 'border-gray-200 bg-white hover:bg-gray-50'
@@ -933,7 +939,8 @@ const AttendanceManager = () => {
                               key={status}
                               type="button"
                               onClick={() => handleNewSessionAttendanceChange(player.id, status)}
-                              className={`attendance-button p-2 rounded-lg text-xs transition-all ${
+                              disabled={!canEdit}
+                              className={`attendance-button p-2 rounded-lg text-xs transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
                                 currentStatus === status ? 'selected scale-105' : ''
                               }`}
                             >
