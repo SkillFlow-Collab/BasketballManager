@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAuth } from './App';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -99,6 +100,7 @@ const EVALUATION_THEMES = [
 ];
 
 const EvaluationManager = () => {
+  const { canEdit } = useAuth();
   const [players, setPlayers] = useState([]);
   const [selectedTheme, setSelectedTheme] = useState(null);
   const [evaluationData, setEvaluationData] = useState({});
@@ -374,13 +376,15 @@ const EvaluationManager = () => {
               </h2>
             </div>
             
-            <button
-              onClick={saveEvaluations}
-              disabled={loading || Object.keys(evaluationData).length === 0}
-              className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-6 py-2 rounded-xl transition-colors font-medium"
-            >
-              {loading ? 'Sauvegarde...' : 'Sauvegarder toutes les évaluations'}
-            </button>
+            {canEdit && (
+              <button
+                onClick={saveEvaluations}
+                disabled={loading || Object.keys(evaluationData).length === 0}
+                className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-6 py-2 rounded-xl transition-colors font-medium"
+              >
+                {loading ? 'Sauvegarde...' : 'Sauvegarder toutes les évaluations'}
+              </button>
+            )}
           </div>
 
           {/* Instructions */}
@@ -445,7 +449,8 @@ const EvaluationManager = () => {
                             <select
                               value={evaluationData[player.id]?.[aspect] ?? ""}
                               onChange={(e) => handleScoreChange(player.id, aspect, e.target.value)}
-                              className={`w-16 p-2 border-2 rounded-lg text-center font-medium ${
+                              disabled={!canEdit}
+                              className={`w-16 p-2 border-2 rounded-lg text-center font-medium disabled:opacity-60 disabled:cursor-not-allowed ${
                                 getScoreColor(
                                   evaluationData[player.id]?.[aspect] === "non_note" || evaluationData[player.id]?.[aspect] === undefined || evaluationData[player.id]?.[aspect] === null
                                     ? 3
