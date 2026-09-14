@@ -445,3 +445,12 @@
 .pdf-exporting .no-print {
   visibility: hidden !important;
 }
+
+/* Les encadrÃ©s avec dÃ©filement (ex: dÃ©tail par thÃ¨me, par entraÃ®neur) sont pratiques
+   Ã  l'Ã©cran, mais lors de la capture pour le PDF, tout ce qui dÃ©passe la hauteur
+   limite Ã©tait invisible/coupÃ©. On dÃ©sactive donc cette limite pendant l'export
+   pour que le PDF affiche toujours la liste complÃ¨te. */
+.pdf-exporting .max-h-80 {
+  max-height: none !important;
+  overflow: visible !important;
+}
