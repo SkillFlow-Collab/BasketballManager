@@ -256,6 +256,8 @@ const AuthProvider = ({ children }) => {
     logout,
     loading,
     isAdmin: user?.role === 'admin',
+    isViewer: user?.role === 'viewer',
+    canEdit: user?.role === 'admin' || user?.role === 'coach', // false pour le rôle lecture seule
     isCoach: user?.role === 'coach'
   };
 
@@ -1220,6 +1222,7 @@ const Dashboard = () => {
 
 // Players Component with Coaches Section
 const Players = React.memo(() => {
+  const { canEdit } = useAuth();
   const [players, setPlayers] = useState([]);
   const [coaches, setCoaches] = useState([]);
   const [activeTab, setActiveTab] = useState('players');
@@ -1721,12 +1724,14 @@ const Players = React.memo(() => {
         <>
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800">Gestion des Joueurs</h1>
-            <button
-              onClick={() => setShowPlayerForm(true)}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-xl transition-colors"
-            >
-              Ajouter un joueur
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => setShowPlayerForm(true)}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-xl transition-colors"
+              >
+                Ajouter un joueur
+              </button>
+            )}
           </div>
 
           {loading ? (
@@ -1769,18 +1774,22 @@ const Players = React.memo(() => {
                     >
                       📊 Évaluations
                     </button>
-                    <button
-                      onClick={() => handlePlayerEdit(player)}
-                      className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-2 rounded-xl transition-colors text-sm"
-                    >
-                      Modifier
-                    </button>
-                    <button
-                      onClick={() => handlePlayerDelete(player.id)}
-                      className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 py-2 rounded-xl transition-colors text-sm"
-                    >
-                      Supprimer
-                    </button>
+                    {canEdit && (
+                      <>
+                        <button
+                          onClick={() => handlePlayerEdit(player)}
+                          className="flex-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-2 rounded-xl transition-colors text-sm"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          onClick={() => handlePlayerDelete(player.id)}
+                          className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 py-2 rounded-xl transition-colors text-sm"
+                        >
+                          Supprimer
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1794,12 +1803,14 @@ const Players = React.memo(() => {
         <>
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800">Staff Technique</h1>
-            <button
-              onClick={() => setShowCoachForm(true)}
-              className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-xl transition-colors"
-            >
-              Ajouter un coach
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => setShowCoachForm(true)}
+                className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-xl transition-colors"
+              >
+                Ajouter un coach
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1815,20 +1826,22 @@ const Players = React.memo(() => {
                 <h3 className="text-lg font-semibold text-center text-gray-800">
                   {coach.first_name} {coach.last_name}
                 </h3>
-                <div className="flex space-x-2 mt-4">
-                  <button
-                    onClick={() => handleCoachEdit(coach)}
-                    className="flex-1 bg-green-100 hover:bg-green-200 text-green-700 py-2 rounded-xl transition-colors"
-                  >
-                    Modifier
-                  </button>
-                  <button
-                    onClick={() => handleCoachDelete(coach.id)}
-                    className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 py-2 rounded-xl transition-colors"
-                  >
-                    Supprimer
-                  </button>
-                </div>
+                {canEdit && (
+                  <div className="flex space-x-2 mt-4">
+                    <button
+                      onClick={() => handleCoachEdit(coach)}
+                      className="flex-1 bg-green-100 hover:bg-green-200 text-green-700 py-2 rounded-xl transition-colors"
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      onClick={() => handleCoachDelete(coach.id)}
+                      className="flex-1 bg-red-100 hover:bg-red-200 text-red-700 py-2 rounded-xl transition-colors"
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -2269,6 +2282,7 @@ const SessionsAndCalendar = () => {
 
 // Sessions Component (renamed to SessionsList for the sub-tab)
 const SessionsList = () => {
+  const { canEdit } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [players, setPlayers] = useState([]);
   const [exercises, setExercises] = useState([]);
@@ -2456,12 +2470,14 @@ const SessionsList = () => {
 
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-2xl font-bold text-gray-800">Séances d'entraînement</h2>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-xl transition-colors"
-        >
-          Nouvelle séance
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-xl transition-colors"
+          >
+            Nouvelle séance
+          </button>
+        )}
       </div>
 
       {/* Filtre par joueur */}
@@ -2686,20 +2702,22 @@ const SessionsList = () => {
                   ) : null}
                   <p className="text-gray-500 text-sm">Entraîneurs: {session.trainers?.join(', ') || 'N/A'}</p>
                 </div>
-                <div className="flex flex-col space-y-2">
-                  <button
-                    onClick={() => handleEdit(session)}
-                    className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-xl text-sm transition-colors"
-                  >
-                    Modifier
-                  </button>
-                  <button
-                    onClick={() => handleDelete(session.id)}
-                    className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded-xl text-sm transition-colors"
-                  >
-                    Supprimer
-                  </button>
-                </div>
+                {canEdit && (
+                  <div className="flex flex-col space-y-2">
+                    <button
+                      onClick={() => handleEdit(session)}
+                      className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-xl text-sm transition-colors"
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      onClick={() => handleDelete(session.id)}
+                      className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded-xl text-sm transition-colors"
+                    >
+                      Supprimer
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             <div className="border-t pt-4">
@@ -3179,6 +3197,7 @@ const Admin = () => {
                 className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
               >
                 <option value="coach">Coach</option>
+                <option value="viewer">Lecture seule</option>
                 <option value="admin">Admin</option>
               </select>
               <div className="flex space-x-3">
@@ -3216,11 +3235,13 @@ const Admin = () => {
                 <p className="text-gray-600">{user.email}</p>
                 <div className="flex items-center space-x-4 mt-1">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    user.role === 'admin' 
-                      ? 'bg-red-100 text-red-800' 
-                      : 'bg-blue-100 text-blue-800'
+                    user.role === 'admin'
+                      ? 'bg-red-100 text-red-800'
+                      : user.role === 'viewer'
+                        ? 'bg-gray-200 text-gray-700'
+                        : 'bg-blue-100 text-blue-800'
                   }`}>
-                    {user.role === 'admin' ? 'Administrateur' : 'Coach'}
+                    {user.role === 'admin' ? 'Administrateur' : user.role === 'viewer' ? 'Lecture seule' : 'Coach'}
                   </span>
                   {user.last_login && (
                     <span className="text-xs text-gray-500">
