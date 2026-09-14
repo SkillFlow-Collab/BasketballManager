@@ -76,13 +76,16 @@ export const exportToPDF = async (elementId, filename = 'export', options = {}) 
         0, 0, canvas.width, sliceHeightPx
       );
 
-      const imgData = pageCanvas.toDataURL('image/png');
+      // JPEG plutôt que PNG : le contenu (dégradés, ombres, anti-aliasing) compresse
+      // beaucoup mieux en JPEG, ce qui réduit énormément la taille du fichier final
+      // (un PNG pouvait atteindre plusieurs dizaines de Mo pour ce type de contenu).
+      const imgData = pageCanvas.toDataURL('image/jpeg', 0.92);
       const imgHeightMm = sliceHeightPx * pxToMm;
 
       if (pageIndex > 0) {
         pdf.addPage();
       }
-      pdf.addImage(imgData, 'PNG', xOffset, margin, imgRenderWidthMm, imgHeightMm);
+      pdf.addImage(imgData, 'JPEG', xOffset, margin, imgRenderWidthMm, imgHeightMm);
 
       renderedHeightPx += sliceHeightPx;
       pageIndex += 1;
