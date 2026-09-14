@@ -2248,10 +2248,14 @@ async def get_dashboard_analytics(current_user: User = Depends(get_current_user)
                 coach_stats[trainer] = coach_stats.get(trainer, 0) + 1
     
     # Player activity analysis - FROM FILTERED SESSIONS ONLY
+    # Uniquement les joueurs de l'équipe "Pro" (les deux encadrés du tableau de bord
+    # ne doivent prendre en compte que cette équipe)
     player_activity = {}
     
-    # Initialize all players with 0 sessions
+    # Initialize Pro players with 0 sessions
     for player in players:
+        if player.get("team") != "Pro":
+            continue
         player_name = f"{player['first_name']} {player['last_name']}"
         player_activity[player_name] = 0
     
