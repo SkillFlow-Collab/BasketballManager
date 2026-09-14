@@ -13,6 +13,7 @@ import {
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { exportPlayerReport, exportCoachReport } from './PdfExportUtils';
+import { useAuth } from './App';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -41,6 +42,7 @@ ChartJS.register(
 );
 
 const ReportsWithEvaluation = () => {
+  const { canEdit } = useAuth();
   const [players, setPlayers] = useState([]);
   const [coaches, setCoaches] = useState([]);
   const [activeTab, setActiveTab] = useState('players');
@@ -710,12 +712,14 @@ const ReportsWithEvaluation = () => {
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-xl font-bold text-gray-800">Fiche Joueur</h3>
                   {!ficheEditMode ? (
-                    <button
-                      onClick={() => setFicheEditMode(true)}
-                      className="no-print bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl transition-colors text-sm font-semibold"
-                    >
-                      ✏️ Modifier la fiche
-                    </button>
+                    canEdit && (
+                      <button
+                        onClick={() => setFicheEditMode(true)}
+                        className="no-print bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl transition-colors text-sm font-semibold"
+                      >
+                        ✏️ Modifier la fiche
+                      </button>
+                    )
                   ) : (
                     <div className="flex space-x-2">
                       <button
