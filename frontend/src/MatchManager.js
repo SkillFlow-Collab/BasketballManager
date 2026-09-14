@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAuth } from './App';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -7,6 +8,7 @@ const API = `${BACKEND_URL}/api`;
 const TEAM_TYPES = ['Partenaire'];
 
 const MatchManager = () => {
+  const { canEdit } = useAuth();
   const [matches, setMatches] = useState([]);
   const [players, setPlayers] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -281,12 +283,14 @@ const MatchManager = () => {
 
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">Gestion des Matchs</h1>
-        <button
-          onClick={() => setShowMatchForm(true)}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl transition-colors"
-        >
-          ➕ Nouveau Match
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowMatchForm(true)}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl transition-colors"
+          >
+            ➕ Nouveau Match
+          </button>
+        )}
       </div>
 
       {/* Month/Year Navigation */}
@@ -363,26 +367,28 @@ const MatchManager = () => {
                       <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs">Extérieur</span>
                     )}
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditMatch(match);
-                      }}
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg transition-colors text-sm font-medium"
-                    >
-                      ✏️ Modifier
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteMatch(match.id);
-                      }}
-                      className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg transition-colors text-sm font-medium"
-                    >
-                      🗑️ Supprimer
-                    </button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditMatch(match);
+                        }}
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg transition-colors text-sm font-medium"
+                      >
+                        ✏️ Modifier
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMatch(match.id);
+                        }}
+                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-lg transition-colors text-sm font-medium"
+                      >
+                        🗑️ Supprimer
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1 text-sm text-gray-600">
                   <p><strong>Date:</strong> {new Date(match.match_date).toLocaleDateString('fr-FR')} à {match.match_time}</p>
@@ -449,7 +455,8 @@ const MatchManager = () => {
                   onClick={() =>
                     handleParticipationChange(player.id, "is_present", !isPresent)
                   }
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  disabled={!canEdit}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
                     isPresent
                       ? "bg-green-500 text-white shadow-md"
                       : "bg-gray-200 text-gray-600 hover:bg-gray-300"
@@ -460,7 +467,7 @@ const MatchManager = () => {
 
                 {/* Titulaire */}
                 <button
-                  disabled={!isPresent}
+                  disabled={!isPresent || !canEdit}
                   onClick={() => {
                     if (isPresent) {
                       handleParticipationChange(
@@ -470,7 +477,7 @@ const MatchManager = () => {
                       );
                     }
                   }}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  className={`px-4 py-2 rounded-lg font-medium transition-all disabled:cursor-not-allowed ${
                     !isPresent
                       ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                       : isStarter
@@ -489,7 +496,7 @@ const MatchManager = () => {
                     max="60"
                     placeholder="0"
                     value={playTime}
-                    disabled={!isPresent}
+                    disabled={!isPresent || !canEdit}
                     onChange={(e) => {
                       const value =
                         e.target.value === ""
@@ -517,14 +524,16 @@ const MatchManager = () => {
     </div>
 
     {/* BOUTON UPDATE */}
-    <div className="mt-6 flex justify-end">
-      <button
-        onClick={updateAllPlayTimes}
-        className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-medium transition-colors shadow-md"
-      >
-        💾 Mettre à jour les temps de jeu
-      </button>
-    </div>
+    {canEdit && (
+      <div className="mt-6 flex justify-end">
+        <button
+          onClick={updateAllPlayTimes}
+          className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl font-medium transition-colors shadow-md"
+        >
+          💾 Mettre à jour les temps de jeu
+        </button>
+      </div>
+    )}
   </div>
 )}
 
