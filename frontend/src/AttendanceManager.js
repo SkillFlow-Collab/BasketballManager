@@ -66,7 +66,7 @@ const AttendanceManager = () => {
 
   const fetchExercises = async () => {
     try {
-      const response = await axios.get(`${API}/exercises`);
+      const response = await axios.get(`${API}/exercises/light`);
       setExercises(response.data);
     } catch (error) {
       console.error('Erreur lors du chargement des exercices:', error);
