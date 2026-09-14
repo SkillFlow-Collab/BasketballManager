@@ -176,10 +176,6 @@ class TeamType(str, Enum):
     Partenaire = "Partenaire"
     Pro = "Pro"
 
-class StatObjective(BaseModel):
-    label: str  # e.g. "Pourcentage à 3pts"
-    target: str  # e.g. "40%" (free text so any kind of stat/unit can be entered)
-
 class Player(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     first_name: str
@@ -191,10 +187,10 @@ class Player(BaseModel):
     photo: Optional[str] = None  # Base64 encoded photo
     created_at: datetime = Field(default_factory=datetime.utcnow)
     # Fiche joueur - projet individuel
-    objectives: Optional[str] = None  # Objectifs du joueur
     work_axes: Optional[str] = None  # Axes de travail
-    strengths_to_keep: Optional[str] = None  # Points forts à conserver
-    stat_objectives: Optional[List[StatObjective]] = Field(default_factory=list)  # Objectifs statistiques
+    strengths_to_keep: Optional[str] = None  # Points forts
+    reference_player: Optional[str] = None  # Joueur référence (modèle/inspiration)
+    additional_notes: Optional[str] = None  # Notes supplémentaires
 
 class PlayerCreate(BaseModel):
     first_name: str
@@ -204,10 +200,10 @@ class PlayerCreate(BaseModel):
     team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
     photo: Optional[str] = None
-    objectives: Optional[str] = None
     work_axes: Optional[str] = None
     strengths_to_keep: Optional[str] = None
-    stat_objectives: Optional[List[StatObjective]] = Field(default_factory=list)
+    reference_player: Optional[str] = None
+    additional_notes: Optional[str] = None
 
 class PlayerUpdate(BaseModel):
     first_name: Optional[str] = None
@@ -217,10 +213,10 @@ class PlayerUpdate(BaseModel):
     team: Optional[TeamType] = None
     coach_referent: Optional[str] = None
     photo: Optional[str] = None
-    objectives: Optional[str] = None
     work_axes: Optional[str] = None
     strengths_to_keep: Optional[str] = None
-    stat_objectives: Optional[List[StatObjective]] = None
+    reference_player: Optional[str] = None
+    additional_notes: Optional[str] = None
 
 class Session(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -944,6 +940,21 @@ async def get_exercises(category: Optional[str] = None, current_user: User = Dep
     exercises = await database.exercises.find(query).to_list(2000)
     return [Exercise(**{k: v for k, v in e.items() if k != "_id"}) for e in exercises]
 
+@api_router.get("/exercises/light")
+async def get_exercises_light(current_user: User = Depends(get_current_user), database = Depends(get_database)):
+    """Version allégée de la liste des exercices (sans le schéma image ni les textes longs),
+    pour les sélecteurs (création de séance) qui n'ont besoin que du nom/catégorie/poste.
+    Évite de télécharger toutes les images à chaque ouverture du formulaire de séance."""
+    projection = {
+        "_id": 0,
+        "id": 1,
+        "name": 1,
+        "category": 1,
+        "positions": 1,
+    }
+    exercises = await database.exercises.find({}, projection).to_list(2000)
+    return exercises
+
 @api_router.get("/exercises/{exercise_id}", response_model=Exercise)
 async def get_exercise(exercise_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
     exercise = await database.exercises.find_one({"id": exercise_id})
@@ -1221,86 +1232,6 @@ async def get_player_evaluation_average(player_id: str, current_user: User = Dep
         "theme_averages": theme_averages,
         "overall_average": overall_average,
         "evaluation_count": len(evaluations)
-    }
-
-@api_router.get("/evaluations/averages/all")
-async def get_all_players_averages(current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    """Get average scores across all players"""
-    evaluations = await database.evaluations.find().to_list(1000)
-    
-    if not evaluations:
-        return {"theme_averages": {}, "overall_average": 0, "total_evaluations": 0}
-    
-    theme_totals = {}
-    theme_counts = {}
-    
-    for evaluation in evaluations:
-        for theme in evaluation.get("themes", []):
-            theme_name = theme["name"]
-            if theme_name not in theme_totals:
-                theme_totals[theme_name] = 0
-                theme_counts[theme_name] = 0
-            
-            if theme.get("average_score"):
-                theme_totals[theme_name] += theme["average_score"]
-                theme_counts[theme_name] += 1
-    
-    theme_averages = {}
-    for theme_name in theme_totals:
-        if theme_counts[theme_name] > 0:
-            theme_averages[theme_name] = round(theme_totals[theme_name] / theme_counts[theme_name], 2)
-    
-    overall_average = round(sum(theme_averages.values()) / len(theme_averages), 2) if theme_averages else 0
-    
-    return {
-        "theme_averages": theme_averages,
-        "overall_average": overall_average,
-        "total_evaluations": len(evaluations)
-    }
-
-@api_router.get("/evaluations/averages/position/{position}")
-async def get_position_averages(position: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
-    """Get average scores for players of a specific position"""
-    # Get all players of this position
-    players = await database.players.find({"position": position}).to_list(1000)
-    player_ids = [player["id"] for player in players]
-    
-    if not player_ids:
-        return {"theme_averages": {}, "overall_average": 0, "total_evaluations": 0}
-    
-    # Get evaluations for these players
-    evaluations = await database.evaluations.find({"player_id": {"$in": player_ids}}).to_list(1000)
-    
-    if not evaluations:
-        return {"theme_averages": {}, "overall_average": 0, "total_evaluations": 0}
-    
-    theme_totals = {}
-    theme_counts = {}
-    
-    for evaluation in evaluations:
-        for theme in evaluation.get("themes", []):
-            theme_name = theme["name"]
-            if theme_name not in theme_totals:
-                theme_totals[theme_name] = 0
-                theme_counts[theme_name] = 0
-            
-            if theme.get("average_score"):
-                theme_totals[theme_name] += theme["average_score"]
-                theme_counts[theme_name] += 1
-    
-    theme_averages = {}
-    for theme_name in theme_totals:
-        if theme_counts[theme_name] > 0:
-            theme_averages[theme_name] = round(theme_totals[theme_name] / theme_counts[theme_name], 2)
-    
-    overall_average = round(sum(theme_averages.values()) / len(theme_averages), 2) if theme_averages else 0
-    
-    return {
-        "position": position,
-        "theme_averages": theme_averages,
-        "overall_average": overall_average,
-        "total_evaluations": len(evaluations),
-        "players_count": len(players)
     }
 
 @app.delete("/api/evaluations/{evaluation_id}")
