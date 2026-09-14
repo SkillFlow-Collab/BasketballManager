@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Radar } from 'react-chartjs-2';
 import axios from 'axios';
+import { useAuth } from './App';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -58,6 +59,7 @@ const EvaluationModal = ({
   onSave,
   EVALUATION_THEMES 
 }) => {
+  const { canEdit } = useAuth();
   const [playerEvaluation, setPlayerEvaluation] = useState(null);
   const [allPlayerEvaluations, setAllPlayerEvaluations] = useState([]);
   const [selectedEvaluationsForRadar, setSelectedEvaluationsForRadar] = useState([]);
@@ -609,12 +611,14 @@ const EvaluationModal = ({
           >
             Annuler
           </button>
-          <button
-            onClick={handleSave}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-xl transition-colors"
-          >
-            💾 Sauvegarder
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleSave}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-xl transition-colors"
+            >
+              💾 Sauvegarder
+            </button>
+          )}
         </div>
       </div>
     </div>
