@@ -135,7 +135,7 @@ class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     email: str
     password_hash: str
-    role: str  # 'admin' or 'coach'
+    role: str  # 'admin', 'coach', or 'viewer' (lecture seule)
     first_name: str
     last_name: str
     must_change_password: bool = False  # Force password change on first login
@@ -567,6 +567,13 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
+async def get_editor_user(current_user: User = Depends(get_current_user)):
+    """Autorise les comptes Admin et Coach (création/modification/suppression).
+    Bloque le rôle 'viewer' (lecture seule)."""
+    if current_user.role not in ('admin', 'coach'):
+        raise HTTPException(status_code=403, detail="Accès en lecture seule : modification non autorisée")
+    return current_user
+
 # Authentication endpoints
 @api_router.post("/auth/login", response_model=LoginResponse)
 async def login(login_data: UserLogin, database = Depends(get_database)):
@@ -672,7 +679,7 @@ async def dev_check_env(request: Request, database = Depends(get_database)):
     }
 
 @api_router.post("/auth/create-user", response_model=UserResponse)
-async def create_user(user_data: UserCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_user(user_data: UserCreate, current_user: User = Depends(get_admin_user), database = Depends(get_database)):
     # Check if user already exists
     existing_user = await database.users.find_one({"email": user_data.email})
     if existing_user:
@@ -699,7 +706,7 @@ async def create_user(user_data: UserCreate, current_user: User = Depends(get_cu
     )
 
 @api_router.get("/auth/users", response_model=List[UserResponse])
-async def get_users(current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def get_users(current_user: User = Depends(get_admin_user), database = Depends(get_database)):
     users = await database.users.find().to_list(1000)
     return [UserResponse(
         id=user['id'],
@@ -712,7 +719,7 @@ async def get_users(current_user: User = Depends(get_current_user), database = D
     ) for user in users]
 
 @api_router.delete("/auth/users/{user_id}")
-async def delete_user(user_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_user(user_id: str, current_user: User = Depends(get_admin_user), database = Depends(get_database)):
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     
@@ -756,7 +763,7 @@ async def change_password(password_data: ChangePasswordRequest, current_user: Us
 
 # Player endpoints (with auth protection)
 @api_router.post("/players", response_model=Player)
-async def create_player(player_data: PlayerCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_player(player_data: PlayerCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     player_dict = player_data.dict()
     player_obj = Player(**player_dict)
     
@@ -781,7 +788,7 @@ async def get_player(player_id: str, current_user: User = Depends(get_current_us
     return Player(**{k: v for k, v in player.items() if k != "_id"})
 
 @api_router.put("/players/{player_id}", response_model=Player)
-async def update_player(player_id: str, player_data: PlayerUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_player(player_id: str, player_data: PlayerUpdate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     update_data = {k: v for k, v in player_data.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
@@ -798,7 +805,7 @@ async def update_player(player_id: str, player_data: PlayerUpdate, current_user:
     return Player(**{k: v for k, v in updated_player.items() if k != "_id"})
 
 @api_router.delete("/players/{player_id}")
-async def delete_player(player_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_player(player_id: str, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     result = await database.players.delete_one({"id": player_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Player not found")
@@ -809,7 +816,7 @@ async def delete_player(player_id: str, current_user: User = Depends(get_current
 
 # Coach endpoints (with auth protection)
 @api_router.post("/coaches", response_model=Coach)
-async def create_coach(coach_data: CoachCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_coach(coach_data: CoachCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     coach_dict = coach_data.dict()
     coach_obj = Coach(**coach_dict)
     await database.coaches.insert_one(coach_obj.dict())
@@ -828,7 +835,7 @@ async def get_coach(coach_id: str, current_user: User = Depends(get_current_user
     return Coach(**coach)
 
 @api_router.put("/coaches/{coach_id}", response_model=Coach)
-async def update_coach(coach_id: str, coach_data: CoachUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_coach(coach_id: str, coach_data: CoachUpdate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     update_data = {k: v for k, v in coach_data.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
@@ -841,7 +848,7 @@ async def update_coach(coach_id: str, coach_data: CoachUpdate, current_user: Use
     return Coach(**updated_coach)
 
 @api_router.delete("/coaches/{coach_id}")
-async def delete_coach(coach_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_coach(coach_id: str, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     result = await database.coaches.delete_one({"id": coach_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Coach not found")
@@ -889,7 +896,7 @@ async def reset_new_season(
 
 # Exercise Library endpoints (bibliothèque d'exercices)
 @api_router.post("/exercise-categories", response_model=ExerciseCategory)
-async def create_exercise_category(category_data: ExerciseCategoryCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_exercise_category(category_data: ExerciseCategoryCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     category_obj = ExerciseCategory(**category_data.dict())
     await database.exercise_categories.insert_one(category_obj.dict())
     return category_obj
@@ -900,7 +907,7 @@ async def get_exercise_categories(current_user: User = Depends(get_current_user)
     return [ExerciseCategory(**{k: v for k, v in c.items() if k != "_id"}) for c in categories]
 
 @api_router.put("/exercise-categories/{category_id}", response_model=ExerciseCategory)
-async def update_exercise_category(category_id: str, category_data: ExerciseCategoryUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_exercise_category(category_id: str, category_data: ExerciseCategoryUpdate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     update_data = {k: v for k, v in category_data.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
@@ -922,14 +929,14 @@ async def update_exercise_category(category_id: str, category_data: ExerciseCate
     return ExerciseCategory(**{k: v for k, v in updated_category.items() if k != "_id"})
 
 @api_router.delete("/exercise-categories/{category_id}")
-async def delete_exercise_category(category_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_exercise_category(category_id: str, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     result = await database.exercise_categories.delete_one({"id": category_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Category not found")
     return {"message": "Category deleted successfully"}
 
 @api_router.post("/exercises", response_model=Exercise)
-async def create_exercise(exercise_data: ExerciseCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_exercise(exercise_data: ExerciseCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     exercise_obj = Exercise(**exercise_data.dict())
     await database.exercises.insert_one(exercise_obj.dict())
     return exercise_obj
@@ -963,7 +970,7 @@ async def get_exercise(exercise_id: str, current_user: User = Depends(get_curren
     return Exercise(**{k: v for k, v in exercise.items() if k != "_id"})
 
 @api_router.put("/exercises/{exercise_id}", response_model=Exercise)
-async def update_exercise(exercise_id: str, exercise_data: ExerciseUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_exercise(exercise_id: str, exercise_data: ExerciseUpdate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     update_data = {k: v for k, v in exercise_data.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
@@ -976,7 +983,7 @@ async def update_exercise(exercise_id: str, exercise_data: ExerciseUpdate, curre
     return Exercise(**{k: v for k, v in updated_exercise.items() if k != "_id"})
 
 @api_router.delete("/exercises/{exercise_id}")
-async def delete_exercise(exercise_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_exercise(exercise_id: str, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     result = await database.exercises.delete_one({"id": exercise_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Exercise not found")
@@ -984,7 +991,7 @@ async def delete_exercise(exercise_id: str, current_user: User = Depends(get_cur
 
 # Player Evaluation endpoints
 @api_router.post("/evaluations", response_model=PlayerEvaluation)
-async def create_evaluation(evaluation_data: EvaluationCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_evaluation(evaluation_data: EvaluationCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     # Verify player exists
     player = await database.players.find_one({"id": evaluation_data.player_id})
     if not player:
@@ -1235,7 +1242,7 @@ async def get_player_evaluation_average(player_id: str, current_user: User = Dep
     }
 
 @app.delete("/api/evaluations/{evaluation_id}")
-async def delete_evaluation(evaluation_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_evaluation(evaluation_id: str, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     """Delete a specific evaluation"""
     try:
         result = await database.evaluations.delete_one({"id": evaluation_id})
@@ -1256,7 +1263,7 @@ async def get_all_evaluations(current_user: User = Depends(get_current_user), da
 
 # Collective Sessions endpoints
 @api_router.post("/collective-sessions", response_model=CollectiveSession)
-async def create_collective_session(session_data: CollectiveSessionCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_collective_session(session_data: CollectiveSessionCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     session_obj = CollectiveSession(**session_data.dict())
     
     # Convert date objects to ISO format strings for MongoDB storage
@@ -1303,7 +1310,7 @@ async def get_collective_session(session_id: str, current_user: User = Depends(g
     return CollectiveSession(**session)
 
 @api_router.put("/collective-sessions/{session_id}", response_model=CollectiveSession)
-async def update_collective_session(session_id: str, session_data: CollectiveSessionCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_collective_session(session_id: str, session_data: CollectiveSessionCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     # Convert date objects to ISO format strings for MongoDB storage
     update_data = session_data.dict()
     if "session_date" in update_data and isinstance(update_data["session_date"], date):
@@ -1320,7 +1327,7 @@ async def update_collective_session(session_id: str, session_data: CollectiveSes
     return CollectiveSession(**updated_session)
 
 @api_router.delete("/collective-sessions/{session_id}")
-async def delete_collective_session(session_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_collective_session(session_id: str, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     # Also delete all attendances for this session
     await database.attendances.delete_many({"collective_session_id": session_id})
     
@@ -1331,7 +1338,7 @@ async def delete_collective_session(session_id: str, current_user: User = Depend
 
 # Match endpoints
 @api_router.post("/matches", response_model=Match)
-async def create_match(match_data: MatchCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_match(match_data: MatchCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     match_obj = Match(**match_data.dict())
     
     # Convert to dict and handle date serialization
@@ -1379,7 +1386,7 @@ async def get_match(match_id: str, current_user: User = Depends(get_current_user
     return Match(**match)
 
 @api_router.put("/matches/{match_id}", response_model=Match)
-async def update_match(match_id: str, match_data: MatchUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_match(match_id: str, match_data: MatchUpdate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     # Build update data excluding None values
     update_data = {k: v for k, v in match_data.dict().items() if v is not None}
     
@@ -1403,7 +1410,7 @@ async def update_match(match_id: str, match_data: MatchUpdate, current_user: Use
     return Match(**updated_match)
 
 @api_router.delete("/matches/{match_id}")
-async def delete_match(match_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_match(match_id: str, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     # Also delete all participations for this match
     await database.match_participations.delete_many({"match_id": match_id})
     
@@ -1414,7 +1421,7 @@ async def delete_match(match_id: str, current_user: User = Depends(get_current_u
 
 # Match Participation endpoints
 @api_router.post("/match-participations", response_model=MatchParticipation)
-async def create_match_participation(participation_data: MatchParticipationCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_match_participation(participation_data: MatchParticipationCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     # Check if participation already exists for this player and match
     existing_participation = await database.match_participations.find_one({
         "match_id": participation_data.match_id,
@@ -1487,7 +1494,7 @@ async def get_player_match_participations(player_id: str, current_user: User = D
     return result
 
 @api_router.put("/match-participations/{participation_id}", response_model=MatchParticipation)
-async def update_match_participation(participation_id: str, participation_data: MatchParticipationUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_match_participation(participation_id: str, participation_data: MatchParticipationUpdate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     # Build update data excluding None values
     update_data = {k: v for k, v in participation_data.dict().items() if v is not None}
     
@@ -1509,7 +1516,7 @@ async def update_match_participation(participation_id: str, participation_data: 
 @api_router.put("/match-participations/batch")
 async def batch_update_match_participations(
     body: MatchParticipationBatchRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_editor_user),
     database = Depends(get_database)
 ):
     updated_ids = []
@@ -1537,7 +1544,7 @@ async def batch_update_match_participations(
     }
 
 @api_router.delete("/match-participations/{participation_id}")
-async def delete_match_participation(participation_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_match_participation(participation_id: str, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     result = await database.match_participations.delete_one({"id": participation_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Match participation not found")
@@ -1545,7 +1552,7 @@ async def delete_match_participation(participation_id: str, current_user: User =
 
 # Attendance endpoints
 @api_router.post("/attendances", response_model=Attendance)
-async def create_attendance(attendance_data: AttendanceCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_attendance(attendance_data: AttendanceCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     # Check if attendance already exists for this player and session
     existing_attendance = await database.attendances.find_one({
         "collective_session_id": attendance_data.collective_session_id,
@@ -1737,7 +1744,7 @@ async def get_player_attendance_report(
     }
 
 @api_router.post("/sessions", response_model=Session)
-async def create_session(session_data: SessionCreate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def create_session(session_data: SessionCreate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     # Verify all players exist
     for player_id in session_data.player_ids:
         player = await database.players.find_one({"id": player_id})
@@ -1819,7 +1826,7 @@ async def get_session(session_id: str, current_user: User = Depends(get_current_
     return Session(**session)
 
 @api_router.put("/sessions/{session_id}", response_model=Session)
-async def update_session(session_id: str, session_data: SessionUpdate, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def update_session(session_id: str, session_data: SessionUpdate, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     update_data = {k: v for k, v in session_data.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
@@ -1836,7 +1843,7 @@ async def update_session(session_id: str, session_data: SessionUpdate, current_u
     return Session(**updated_session)
 
 @api_router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, current_user: User = Depends(get_current_user), database = Depends(get_database)):
+async def delete_session(session_id: str, current_user: User = Depends(get_editor_user), database = Depends(get_database)):
     result = await database.sessions.delete_one({"id": session_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Session not found")
