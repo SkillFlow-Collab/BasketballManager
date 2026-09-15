@@ -49,6 +49,8 @@ const ReportsWithEvaluation = () => {
   const [selectedPlayer, setSelectedPlayer] = useState('');
   const [selectedCoach, setSelectedCoach] = useState('');
   const [playerReport, setPlayerReport] = useState(null);
+  const [exportingAll, setExportingAll] = useState(false);
+  const [exportAllProgress, setExportAllProgress] = useState({ current: 0, total: 0 });
   const [coachReport, setCoachReport] = useState(null);
   const [playerEvaluation, setPlayerEvaluation] = useState(null);
   const [allPlayerEvaluations, setAllPlayerEvaluations] = useState([]);
@@ -66,6 +68,13 @@ const ReportsWithEvaluation = () => {
     start_date: '',
     end_date: ''
   });
+
+  // Comparaison de 2 joueurs
+  const [comparePlayerAId, setComparePlayerAId] = useState('');
+  const [comparePlayerBId, setComparePlayerBId] = useState('');
+  const [compareDataA, setCompareDataA] = useState(null);
+  const [compareDataB, setCompareDataB] = useState(null);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   // Fiche Joueur (points forts, axes de travail, joueur référence, notes supplémentaires)
   const emptyFiche = { strengths_to_keep: '', work_axes: '', reference_player: '', additional_notes: '' };
@@ -190,6 +199,121 @@ const ReportsWithEvaluation = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // --- Export PDF de toute l'équipe ---
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const handleExportAllPlayers = async () => {
+    if (players.length === 0) return;
+    if (!window.confirm(`Exporter le rapport PDF des ${players.length} joueurs ? Un fichier sera téléchargé pour chacun, l'un après l'autre.`)) {
+      return;
+    }
+    setExportingAll(true);
+    setExportAllProgress({ current: 0, total: players.length });
+
+    for (let i = 0; i < players.length; i++) {
+      const player = players[i];
+      setExportAllProgress({ current: i + 1, total: players.length });
+      setSelectedPlayer(player.id);
+      // eslint-disable-next-line no-await-in-loop
+      await fetchPlayerReport(player.id);
+      // Laisse le temps à React de mettre à jour l'affichage avant la capture
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(400);
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await exportPlayerReport(`${player.first_name} ${player.last_name}`);
+      } catch (error) {
+        console.error(`Erreur export PDF pour ${player.first_name} ${player.last_name}:`, error);
+      }
+      // Petite pause entre chaque téléchargement pour éviter que le navigateur ne les bloque
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(800);
+    }
+
+    setExportingAll(false);
+  };
+
+
+  const fetchComparePlayerData = async (playerId) => {
+    try {
+      const [reportRes, evalRes] = await Promise.allSettled([
+        axios.get(`${API}/reports/player/${playerId}`),
+        axios.get(`${API}/evaluations/player/${playerId}`)
+      ]);
+
+      const report = reportRes.status === 'fulfilled' ? reportRes.value.data : null;
+      const evaluations = evalRes.status === 'fulfilled' ? evalRes.value.data : [];
+      const latestEvaluation = evaluations.length > 0 ? evaluations[0] : null;
+
+      return { report, latestEvaluation };
+    } catch (error) {
+      console.error('Erreur lors du chargement des données de comparaison:', error);
+      return { report: null, latestEvaluation: null };
+    }
+  };
+
+  useEffect(() => {
+    if (!comparePlayerAId) {
+      setCompareDataA(null);
+      return;
+    }
+    setCompareLoading(true);
+    fetchComparePlayerData(comparePlayerAId).then(data => {
+      setCompareDataA(data);
+      setCompareLoading(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comparePlayerAId]);
+
+  useEffect(() => {
+    if (!comparePlayerBId) {
+      setCompareDataB(null);
+      return;
+    }
+    setCompareLoading(true);
+    fetchComparePlayerData(comparePlayerBId).then(data => {
+      setCompareDataB(data);
+      setCompareLoading(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comparePlayerBId]);
+
+  const COMPARE_THEMES = ['ADRESSE', 'AISANCE', 'PASSE', 'DEFENSE', 'REBOND', 'ATHLETE', 'TACTIQUE', 'COACHABILITE'];
+
+  const getCompareRadarData = () => {
+    const buildScores = (evaluation) => {
+      if (!evaluation || !evaluation.themes) return COMPARE_THEMES.map(() => 0);
+      const themeScores = {};
+      evaluation.themes.forEach(theme => {
+        themeScores[theme.name] = theme.average_score || 0;
+      });
+      return COMPARE_THEMES.map(name => themeScores[name] || 0);
+    };
+
+    const datasets = [];
+    if (compareDataA?.latestEvaluation) {
+      datasets.push({
+        label: `${compareDataA.report?.player?.first_name || 'Joueur A'}`,
+        data: buildScores(compareDataA.latestEvaluation),
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.3)',
+        borderWidth: 2
+      });
+    }
+    if (compareDataB?.latestEvaluation) {
+      datasets.push({
+        label: `${compareDataB.report?.player?.first_name || 'Joueur B'}`,
+        data: buildScores(compareDataB.latestEvaluation),
+        borderColor: 'rgb(245, 101, 11)',
+        backgroundColor: 'rgba(245, 101, 11, 0.3)',
+        borderWidth: 2
+      });
+    }
+
+    if (datasets.length === 0) return null;
+    return { labels: COMPARE_THEMES, datasets };
   };
 
   const fetchCoachReport = async (coachName) => {
@@ -585,6 +709,16 @@ const ReportsWithEvaluation = () => {
         >
           Rapports Coachs
         </button>
+        <button
+          onClick={() => setActiveTab('compare')}
+          className={`sub-nav-button ${
+            activeTab === 'compare' 
+              ? 'sub-nav-button-active' 
+              : 'sub-nav-button-inactive'
+          }`}
+        >
+          Comparer 2 joueurs
+        </button>
       </div>
 
       {/* Date Filter */}
@@ -623,6 +757,18 @@ const ReportsWithEvaluation = () => {
         <>
           <div className="flex justify-between items-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800">Rapports des Joueurs</h1>
+            <button
+              onClick={handleExportAllPlayers}
+              disabled={exportingAll || players.length === 0}
+              className="no-print bg-teal-500 hover:bg-teal-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-5 py-3 rounded-xl transition-colors flex items-center space-x-2 font-semibold"
+            >
+              <span>📦</span>
+              <span>
+                {exportingAll
+                  ? `Export en cours... (${exportAllProgress.current}/${exportAllProgress.total})`
+                  : "Exporter tous les rapports"}
+              </span>
+            </button>
           </div>
 
           <div className="mb-6">
@@ -1193,10 +1339,19 @@ const ReportsWithEvaluation = () => {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                   <div className="bg-blue-50 p-4 rounded-xl">
                     <h3 className="text-lg font-semibold text-blue-800 mb-2">Total Séances</h3>
                     <p className="text-3xl font-bold text-blue-600">{coachReport.total_sessions}</p>
+                    {(coachReport.mandatory_sessions !== undefined) && (
+                      <p className="text-xs text-blue-500 mt-1">
+                        {coachReport.mandatory_sessions} obligatoire{coachReport.mandatory_sessions > 1 ? 's' : ''} · {coachReport.optional_sessions} facultative{coachReport.optional_sessions > 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
+                  <div className="bg-teal-50 p-4 rounded-xl">
+                    <h3 className="text-lg font-semibold text-teal-800 mb-2">Durée de travail</h3>
+                    <p className="text-3xl font-bold text-teal-600">{formatDuration(coachReport.total_duration_minutes)}</p>
                   </div>
                   <div className="bg-green-50 p-4 rounded-xl">
                     <h3 className="text-lg font-semibold text-green-800 mb-2">Thèmes Enseignés</h3>
@@ -1229,6 +1384,9 @@ const ReportsWithEvaluation = () => {
                             <span className="font-medium text-gray-700">{theme}</span>
                             <div className="text-right">
                               <span className="font-bold text-blue-600">{count} séances</span>
+                              {coachReport.duration_by_theme?.[theme] ? (
+                                <p className="text-sm text-teal-600">{formatDuration(coachReport.duration_by_theme[theme])}</p>
+                              ) : null}
                               <p className="text-sm text-gray-500">{percentage}%</p>
                             </div>
                           </div>
@@ -1251,10 +1409,149 @@ const ReportsWithEvaluation = () => {
                     ))}
                   </div>
                 </div>
+
+                {coachReport.recent_sessions && coachReport.recent_sessions.length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4">Séances Récentes</h3>
+                    <div className="space-y-3">
+                      {coachReport.recent_sessions.map((session, index) => (
+                        <div key={index} className="flex justify-between items-start p-4 bg-gray-50 rounded-xl">
+                          <div>
+                            <p className="font-semibold text-gray-800">{session.themes?.join(', ') || 'Séance'}</p>
+                            <span className={`inline-block mt-1 mb-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                              session.is_mandatory === false
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {session.is_mandatory === false ? 'Facultative' : 'Obligatoire'}
+                            </span>
+                            <p className="text-gray-600 text-sm">{session.content_details}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-gray-600">{new Date(session.session_date).toLocaleDateString('fr-FR')}</p>
+                            {session.duration_minutes ? (
+                              <p className="text-teal-600 text-sm font-medium">{formatDuration(session.duration_minutes)}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
         </>
+      )}
+
+      {/* Compare Tab */}
+      {activeTab === 'compare' && (
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800 mb-8">Comparer 2 joueurs</h1>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Joueur A</label>
+              <select
+                value={comparePlayerAId}
+                onChange={(e) => setComparePlayerAId(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Sélectionner un joueur</option>
+                {players.map(player => (
+                  <option key={player.id} value={player.id}>
+                    {player.first_name} {player.last_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Joueur B</label>
+              <select
+                value={comparePlayerBId}
+                onChange={(e) => setComparePlayerBId(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Sélectionner un joueur</option>
+                {players.map(player => (
+                  <option key={player.id} value={player.id}>
+                    {player.first_name} {player.last_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {compareLoading && (
+            <div className="text-center py-12 text-gray-500">Chargement...</div>
+          )}
+
+          {!compareLoading && (compareDataA?.report || compareDataB?.report) && (
+            <>
+              {/* Cartes côte à côte */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                {[compareDataA, compareDataB].map((data, idx) => (
+                  <div key={idx} className="bg-white rounded-2xl shadow-lg p-6">
+                    {data?.report ? (
+                      <>
+                        <h2 className="text-2xl font-bold text-gray-800 mb-1">
+                          {data.report.player.first_name} {data.report.player.last_name}
+                        </h2>
+                        <p className="text-gray-500 mb-4">
+                          {data.report.player.position}
+                          {data.report.player.team ? ` · ${data.report.player.team}` : ''}
+                        </p>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-blue-50 p-3 rounded-xl">
+                            <p className="text-xs text-blue-700 font-medium">Séances</p>
+                            <p className="text-2xl font-bold text-blue-600">{data.report.total_sessions}</p>
+                          </div>
+                          <div className="bg-teal-50 p-3 rounded-xl">
+                            <p className="text-xs text-teal-700 font-medium">Durée de travail</p>
+                            <p className="text-2xl font-bold text-teal-600">{formatDuration(data.report.total_duration_minutes)}</p>
+                          </div>
+                          <div className="bg-green-50 p-3 rounded-xl">
+                            <p className="text-xs text-green-700 font-medium">Thèmes travaillés</p>
+                            <p className="text-2xl font-bold text-green-600">{Object.keys(data.report.content_breakdown || {}).length}</p>
+                          </div>
+                          <div className="bg-purple-50 p-3 rounded-xl">
+                            <p className="text-xs text-purple-700 font-medium">Matchs joués</p>
+                            <p className="text-2xl font-bold text-purple-600">{data.report.match_stats?.matches_played ?? 0}</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-gray-400 text-center py-12">Choisis un joueur ci-dessus</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Radar comparatif */}
+              {getCompareRadarData() && (
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4">Comparaison des évaluations (dernière évaluation de chacun)</h3>
+                  <div style={{ height: '400px' }}>
+                    <Radar
+                      data={getCompareRadarData()}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                          r: {
+                            min: 0,
+                            max: 5,
+                            ticks: { stepSize: 1 }
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       )}
     </div>
   );
