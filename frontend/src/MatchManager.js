@@ -5,7 +5,7 @@ import { useAuth } from './App';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const TEAM_TYPES = ['Partenaire'];
+const TEAM_TYPES = ['Pro', 'Partenaire'];
 
 const MatchManager = () => {
   const { canEdit } = useAuth();
