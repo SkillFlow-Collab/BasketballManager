@@ -216,19 +216,19 @@ const ReportsWithEvaluation = () => {
       const player = players[i];
       setExportAllProgress({ current: i + 1, total: players.length });
       setSelectedPlayer(player.id);
-      // eslint-disable-next-line no-await-in-loop
+      // eslint-disable-next-line
       await fetchPlayerReport(player.id);
       // Laisse le temps à React de mettre à jour l'affichage avant la capture
-      // eslint-disable-next-line no-await-in-loop
+      // eslint-disable-next-line
       await sleep(400);
       try {
-        // eslint-disable-next-line no-await-in-loop
+        // eslint-disable-next-line
         await exportPlayerReport(`${player.first_name} ${player.last_name}`);
       } catch (error) {
         console.error(`Erreur export PDF pour ${player.first_name} ${player.last_name}:`, error);
       }
       // Petite pause entre chaque téléchargement pour éviter que le navigateur ne les bloque
-      // eslint-disable-next-line no-await-in-loop
+      // eslint-disable-next-line
       await sleep(800);
     }
 
@@ -264,7 +264,7 @@ const ReportsWithEvaluation = () => {
       setCompareDataA(data);
       setCompareLoading(false);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, [comparePlayerAId]);
 
   useEffect(() => {
@@ -277,7 +277,7 @@ const ReportsWithEvaluation = () => {
       setCompareDataB(data);
       setCompareLoading(false);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, [comparePlayerBId]);
 
   const COMPARE_THEMES = ['ADRESSE', 'AISANCE', 'PASSE', 'DEFENSE', 'REBOND', 'ATHLETE', 'TACTIQUE', 'COACHABILITE'];
