@@ -288,7 +288,11 @@ class CoachUpdate(BaseModel):
 class CoachReport(BaseModel):
     coach: Coach
     total_sessions: int
+    mandatory_sessions: int = 0
+    optional_sessions: int = 0
+    total_duration_minutes: int = 0
     theme_breakdown: dict
+    duration_by_theme: dict = Field(default_factory=dict)
     player_breakdown: dict
     recent_sessions: List[Session]
 
@@ -2072,14 +2076,20 @@ async def get_coach_report(coach_name: str, current_user: User = Depends(get_cur
     
     # Calculate statistics
     total_sessions = len(session_objects)
+    mandatory_sessions = sum(1 for s in session_objects if s.is_mandatory)
+    optional_sessions = total_sessions - mandatory_sessions
+    total_duration_minutes = sum(s.duration_minutes for s in session_objects if s.duration_minutes)
     
     # Theme breakdown
     theme_breakdown = {}
+    duration_by_theme = {}
     for session_obj in session_objects:
         themes = session_obj.themes or []
         for theme in themes:
             if theme.strip():
                 theme_breakdown[theme] = theme_breakdown.get(theme, 0) + 1
+                if session_obj.duration_minutes:
+                    duration_by_theme[theme] = duration_by_theme.get(theme, 0) + session_obj.duration_minutes
     
     # Player breakdown
     player_breakdown = {}
@@ -2098,7 +2108,11 @@ async def get_coach_report(coach_name: str, current_user: User = Depends(get_cur
     return CoachReport(
         coach=Coach(**coach),
         total_sessions=total_sessions,
+        mandatory_sessions=mandatory_sessions,
+        optional_sessions=optional_sessions,
+        total_duration_minutes=total_duration_minutes,
         theme_breakdown=theme_breakdown,
+        duration_by_theme=duration_by_theme,
         player_breakdown=player_breakdown,
         recent_sessions=recent_sessions
     )
@@ -2259,13 +2273,15 @@ async def get_dashboard_analytics(current_user: User = Depends(get_current_user)
         player_name = f"{player['first_name']} {player['last_name']}"
         player_activity[player_name] = 0
     
-    # Count actual sessions for each player FROM FILTERED SESSIONS
+    # Count actual TIME (minutes) for each player FROM FILTERED SESSIONS
+    # (plutôt que le nombre de séances, plus parlant pour le classement)
     for session in processed_sessions:
         player_ids = session.get("player_ids", [])
+        session_duration = session.get("duration_minutes") or 0
         for player_id in player_ids:
             player_name = player_lookup.get(player_id, "Unknown")
             if player_name in player_activity:
-                player_activity[player_name] += 1
+                player_activity[player_name] += session_duration
     
     # Sort players by activity (least active first for alerts)
     sorted_players = sorted(player_activity.items(), key=lambda x: x[1])
