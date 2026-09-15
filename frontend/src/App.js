@@ -661,6 +661,17 @@ const Navigation = () => {
 };
 
 // Dashboard Performance Component (Enhanced)
+// Formate une durée en minutes en "Xh Ymin" (ou "Ymin" si moins d'une heure)
+const formatMinutesToHours = (totalMinutes) => {
+  const minutes = totalMinutes || 0;
+  if (minutes <= 0) return '0 min';
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours === 0) return `${remainingMinutes} min`;
+  if (remainingMinutes === 0) return `${hours}h`;
+  return `${hours}h ${remainingMinutes}min`;
+};
+
 const Dashboard = () => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1151,11 +1162,11 @@ const Dashboard = () => {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-800">Top 5 Joueurs Actifs</h2>
-                <p className="text-sm text-gray-600">Classement par nombre de séances</p>
+                <p className="text-sm text-gray-600">Classement par temps de travail</p>
               </div>
             </div>
             <div className="space-y-4">
-              {topPlayers.map(([player, sessions], index) => (
+              {topPlayers.map(([player, minutes], index) => (
                 <div key={player} className="flex items-center justify-between p-5 bg-gradient-to-r from-white/60 to-gray-50/60 rounded-2xl border border-gray-200/50 hover:shadow-lg hover:scale-105 transition-all duration-300 backdrop-blur-sm">
                   <div className="flex items-center space-x-4">
                     <div className="text-3xl transform hover:rotate-12 transition-transform duration-300">{getMedal(index)}</div>
@@ -1166,9 +1177,8 @@ const Dashboard = () => {
                   </div>
                   <div className="text-right">
                     <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-full px-4 py-2">
-                      <span className="font-bold text-lg">{sessions}</span>
+                      <span className="font-bold text-lg">{formatMinutesToHours(minutes)}</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">séances</p>
                   </div>
                 </div>
               ))}
@@ -1187,7 +1197,7 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="space-y-4">
-              {analytics.least_active_players.map(([player, sessions]) => (
+              {analytics.least_active_players.map(([player, minutes]) => (
                 <div key={player} className="flex items-center justify-between p-5 bg-gradient-to-r from-red-50/80 to-pink-50/80 rounded-2xl border border-red-200/50 hover:shadow-lg transition-all duration-300 backdrop-blur-sm">
                   <div className="flex items-center space-x-4">
                     <div className="bg-red-100 rounded-full p-2">
@@ -1200,9 +1210,8 @@ const Dashboard = () => {
                   </div>
                   <div className="text-right">
                     <div className="bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-full px-4 py-2">
-                      <span className="font-bold">{sessions}</span>
+                      <span className="font-bold">{formatMinutesToHours(minutes)}</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">séances</p>
                   </div>
                 </div>
               ))}
