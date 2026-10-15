@@ -2132,6 +2132,7 @@ async def get_calendar_data(current_user: User = Depends(get_current_user), data
         # If session_date is a string, keep it as is
         if not isinstance(session_date, str):
             session_date = session_date.isoformat()
+        session_date = session_date[:10]
         
         # Handle both old and new format for player references
         player_names = []
@@ -2162,7 +2163,9 @@ async def get_calendar_data(current_user: User = Depends(get_current_user), data
             "player_names": player_names,
             "themes": themes,
             "trainers": trainers,
-            "content_details": session.get("content_details", session.get("results", ""))
+            "content_details": session.get("content_details", session.get("results", "")),
+            "duration_minutes": session.get("duration_minutes") or 0,
+            "is_mandatory": session.get("is_mandatory", True)
         })
     
     return calendar_data
