@@ -2771,8 +2771,18 @@ const CalendarView = () => {
 
   const fetchCalendarData = async () => {
     try {
-      const response = await axios.get(`${API}/calendar`);
-      setCalendarData(response.data);
+      const [calRes, sessRes] = await Promise.all([
+        axios.get(`${API}/calendar`),
+        axios.get(`${API}/sessions`).catch(() => ({ data: [] }))
+      ]);
+      // Durées et caractère obligatoire lus depuis la liste des séances
+      const extra = {};
+      (sessRes.data || []).forEach(x => { extra[x.id] = x; });
+      setCalendarData(calRes.data.map(c => ({
+        ...c,
+        duration_minutes: c.duration_minutes || (extra[c.id] && extra[c.id].duration_minutes) || 0,
+        is_mandatory: extra[c.id] ? extra[c.id].is_mandatory !== false : c.is_mandatory
+      })));
     } catch (error) {
       console.error('Erreur lors du chargement du calendrier:', error);
     }
@@ -3009,6 +3019,13 @@ const CalendarView = () => {
                 <p className="text-gray-600">{new Date(`${String(selectedSession.session_date).slice(0,10)}T12:00:00`).toLocaleDateString('fr-FR')}</p>
               </div>
               
+              {selectedSession.duration_minutes > 0 && (
+                <div>
+                  <h3 className="font-semibold text-gray-700">Durée:</h3>
+                  <p className="text-gray-600">{formatMinutes(selectedSession.duration_minutes)}</p>
+                </div>
+              )}
+
               <div>
                 <h3 className="font-semibold text-gray-700">Thèmes:</h3>
                 <div className="flex flex-wrap gap-2 mt-1">
