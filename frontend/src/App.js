@@ -2806,60 +2806,72 @@ const CalendarView = () => {
     return acc;
   }, {});
 
-  // Get days for calendar view
-  const getDaysInMonth = (date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const days = [];
-
-    // Add days from previous month to fill the first week
-    const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - firstDay.getDay());
-
-    // Add 42 days (6 weeks)
-    for (let i = 0; i < 42; i++) {
-      const day = new Date(startDate);
-      day.setDate(startDate.getDate() + i);
-      days.push(day);
-    }
-
-    return days;
+  // Clé de date locale (évite le décalage UTC de toISOString)
+  const dateKey = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
   };
 
-  const days = getDaysInMonth(currentMonth);
+  // Semaines (lundi -> dimanche), 6 lignes
+  const getWeeksInMonth = (date) => {
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+    const offset = (firstDay.getDay() + 6) % 7; // lundi = 0
+    const start = new Date(firstDay);
+    start.setDate(start.getDate() - offset);
+    const weeks = [];
+    for (let w = 0; w < 6; w++) {
+      const week = [];
+      for (let i = 0; i < 7; i++) {
+        const day = new Date(start);
+        day.setDate(start.getDate() + w * 7 + i);
+        week.push(day);
+      }
+      // ne pas afficher une 6e semaine entièrement hors du mois
+      if (w === 5 && week[0].getMonth() !== date.getMonth()) break;
+      weeks.push(week);
+    }
+    return weeks;
+  };
+
+  const weeks = getWeeksInMonth(currentMonth);
   const monthNames = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
   const previousMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
   };
 
   const nextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   };
 
-  const isCurrentMonth = (day) => {
-    return day.getMonth() === currentMonth.getMonth();
+  const isCurrentMonth = (day) => day.getMonth() === currentMonth.getMonth();
+
+  const getSessionsForDay = (day) => sessionsByDate[dateKey(day)] || [];
+
+  const formatMinutes = (min) => {
+    if (!min) return '0h';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
   };
 
-  const getSessionsForDay = (day) => {
-    const dateStr = day.toISOString().split('T')[0];
-    return sessionsByDate[dateStr] || [];
-  };
+  const getWeekMinutes = (week) =>
+    week.reduce((sum, day) => sum + getSessionsForDay(day).reduce((s, x) => s + (x.duration_minutes || 0), 0), 0);
 
-  // Calcul des statistiques du mois
-  const getMonthStats = () => {
-    const monthSessions = calendarData.filter(session => {
-      const sessionDate = new Date(session.date);
-      return sessionDate.getMonth() === currentMonth.getMonth() && 
-             sessionDate.getFullYear() === currentMonth.getFullYear();
-    });
-    return monthSessions.length;
-  };
+  const getWeekCount = (week) =>
+    week.reduce((sum, day) => sum + getSessionsForDay(day).length, 0);
+
+  // Statistiques du mois
+  const monthPrefix = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}`;
+  const monthSessions = calendarData.filter(x => (x.date || '').startsWith(monthPrefix));
+  const getMonthStats = () => monthSessions.length;
+  const monthMinutes = monthSessions.reduce((s, x) => s + (x.duration_minutes || 0), 0);
+  const missingDuration = monthSessions.filter(x => !x.duration_minutes).length;
 
   const getPlayerNames = (playerIds) => {
     return playerIds?.map(id => {
@@ -2870,11 +2882,14 @@ const CalendarView = () => {
 
   return (
     <div className="px-4 py-4">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-wrap gap-3 justify-between items-center mb-8">
         <h2 className="text-2xl font-bold text-gray-800">Calendrier des entraînements</h2>
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="bg-blue-100 px-4 py-2 rounded-full">
             <span className="font-medium text-blue-800">📅 {getMonthStats()} séances ce mois</span>
+          </div>
+          <div className="bg-blue-100 px-4 py-2 rounded-full">
+            <span className="font-medium text-blue-800">⏱️ {formatMinutes(monthMinutes)} ce mois</span>
           </div>
           <button
             onClick={previousMonth}
@@ -2896,59 +2911,74 @@ const CalendarView = () => {
 
       <div className="bg-white rounded-2xl shadow-lg overflow-hidden relative">
         {/* Header with day names */}
-        <div className="grid grid-cols-7 bg-gray-50">
-          {['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map(day => (
-            <div key={day} className="p-4 text-center font-semibold text-gray-700">
+        <div className="grid grid-cols-8 bg-gray-50">
+          {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
+            <div key={day} className="p-3 text-center font-semibold text-gray-700">
               {day}
             </div>
           ))}
+          <div className="p-3 text-center font-semibold text-blue-800 bg-blue-50">Temps</div>
         </div>
 
         {/* Calendar grid */}
-        <div className="grid grid-cols-7">
-          {days.map((day, index) => {
-            const daySessions = getSessionsForDay(day);
-            const isOtherMonth = !isCurrentMonth(day);
-            
-            return (
-              <div
-                key={index}
-                className={`min-h-[120px] border-b border-r border-gray-200 p-2 ${
-                  isOtherMonth ? 'bg-gray-50 text-gray-400' : 'bg-white'
-                }`}
-              >
-                <div className="font-semibold mb-1">
-                  {day.getDate()}
+        {weeks.map((week, wi) => (
+          <div key={wi} className="grid grid-cols-8">
+            {week.map((day, index) => {
+              const daySessions = getSessionsForDay(day);
+              const isOtherMonth = !isCurrentMonth(day);
+              return (
+                <div
+                  key={index}
+                  className={`min-h-[110px] min-w-0 border-b border-r border-gray-200 p-2 ${
+                    isOtherMonth ? 'bg-gray-50 text-gray-400' : 'bg-white'
+                  }`}
+                >
+                  <div className="font-semibold mb-1">{day.getDate()}</div>
+                  <div className="space-y-1">
+                    {daySessions.slice(0, 3).map((session, idx) => (
+                      <div
+                        key={idx}
+                        className={`text-xs px-2 py-1 rounded truncate cursor-pointer transition-colors ${
+                          session.is_mandatory === false
+                            ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                        }`}
+                        onMouseEnter={() => setHoveredSession(session)}
+                        onMouseLeave={() => setHoveredSession(null)}
+                        onClick={() => fetchSessionDetails(session.id)}
+                      >
+                        {session.player_names?.slice(0, 2).join(', ')}
+                      </div>
+                    ))}
+                    {daySessions.length > 3 && (
+                      <div className="text-xs text-gray-500">+{daySessions.length - 3} de plus</div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  {daySessions.slice(0, 3).map((session, idx) => (
-                    <div
-                      key={idx}
-                      className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded truncate cursor-pointer hover:bg-blue-200 transition-colors"
-                      onMouseEnter={() => setHoveredSession(session)}
-                      onMouseLeave={() => setHoveredSession(null)}
-                      onClick={() => fetchSessionDetails(session.id)}
-                    >
-                      {session.player_names?.slice(0, 2).join(', ')}
-                    </div>
-                  ))}
-                  {daySessions.length > 3 && (
-                    <div className="text-xs text-gray-500">
-                      +{daySessions.length - 3} de plus
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+            <div className="min-h-[110px] border-b border-gray-200 bg-blue-50 p-2 flex flex-col items-center justify-center text-center">
+              <div className="text-lg font-bold text-blue-800">{formatMinutes(getWeekMinutes(week))}</div>
+              <div className="text-xs text-blue-700">{getWeekCount(week)} séance{getWeekCount(week) > 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        ))}
+      </div>
 
+      <p className="text-xs text-gray-500 mt-3">
+        Colonne « Temps » : durée cumulée des séances individuelles de la semaine (lundi → dimanche).
+        {missingDuration > 0 && ` ${missingDuration} séance(s) de ce mois n'ont pas de durée renseignée et ne sont pas comptées.`}
+        {' '}Séances facultatives en gris.
+      </p>
+
+      <div>
         {/* Hover tooltip */}
         {hoveredSession && (
-          <div className="absolute top-4 right-4 bg-gray-800 text-white p-3 rounded-lg shadow-lg z-10 max-w-xs">
+          <div className="fixed top-24 right-4 bg-gray-800 text-white p-3 rounded-lg shadow-lg z-40 max-w-xs">
             <h4 className="font-semibold text-sm">{hoveredSession.player_names?.join(', ')}</h4>
             <p className="text-xs mt-1">Thèmes: {hoveredSession.themes?.join(', ')}</p>
             <p className="text-xs">Entraîneurs: {hoveredSession.trainers?.join(', ')}</p>
+            {hoveredSession.duration_minutes > 0 && <p className="text-xs">Durée: {formatMinutes(hoveredSession.duration_minutes)}</p>}
             <p className="text-xs mt-1 italic">Cliquez pour voir les détails</p>
           </div>
         )}
@@ -2976,7 +3006,7 @@ const CalendarView = () => {
               
               <div>
                 <h3 className="font-semibold text-gray-700">Date:</h3>
-                <p className="text-gray-600">{new Date(selectedSession.session_date).toLocaleDateString('fr-FR')}</p>
+                <p className="text-gray-600">{new Date(`${String(selectedSession.session_date).slice(0,10)}T12:00:00`).toLocaleDateString('fr-FR')}</p>
               </div>
               
               <div>
