@@ -116,8 +116,49 @@ const WorkTimeChart = () => {
   const data = {
     labels: rows.map(r => r.name),
     datasets: [
-      { label: 'Obligatoire', data: rows.map(r => r.mandatory), backgroundColor: '#45bbc9', borderRadius: 4 },
-      { label: 'Facultatif', data: rows.map(r => r.optional), backgroundColor: '#a7e3ea', borderRadius: 4 }
+      {
+        label: 'Obligatoire',
+        data: rows.map(r => r.mandatory),
+        backgroundColor: '#45bbc9',
+        borderRadius: 4,
+        datalabels: {
+          display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 30,
+          color: '#0b3d44',
+          anchor: 'center',
+          align: 'center',
+          font: { weight: 'bold', size: 12 },
+          formatter: (v) => formatDuration(v)
+        }
+      },
+      {
+        label: 'Facultatif',
+        data: rows.map(r => r.optional),
+        backgroundColor: '#a7e3ea',
+        borderRadius: 4,
+        datalabels: {
+          display: (ctx) => ctx.dataset.data[ctx.dataIndex] >= 30,
+          color: '#0b3d44',
+          anchor: 'center',
+          align: 'center',
+          font: { size: 12 },
+          formatter: (v) => formatDuration(v)
+        }
+      },
+      {
+        // Série invisible : affiche le total à la fin de chaque barre
+        label: 'Total',
+        data: rows.map(() => 0),
+        backgroundColor: 'rgba(0,0,0,0)',
+        datalabels: {
+          display: true,
+          anchor: 'start',
+          align: 'right',
+          offset: 6,
+          color: '#1f2937',
+          font: { weight: 'bold', size: 14 },
+          formatter: (v, ctx) => formatDuration(rows[ctx.dataIndex].total)
+        }
+      }
     ]
   };
 
@@ -125,10 +166,14 @@ const WorkTimeChart = () => {
     indexAxis: 'y',
     responsive: true,
     maintainAspectRatio: false,
+    layout: { padding: { right: 70 } },
     plugins: {
-      datalabels: { display: false },
-      legend: { position: 'bottom' },
+      legend: {
+        position: 'bottom',
+        labels: { filter: (item) => item.text !== 'Total' }
+      },
       tooltip: {
+        filter: (item) => item.dataset.label !== 'Total',
         callbacks: {
           label: (ctx) => `${ctx.dataset.label} : ${formatDuration(ctx.parsed.x)}`,
           footer: (items) => `Total : ${formatDuration(items.reduce((s, i) => s + i.parsed.x, 0))}`
