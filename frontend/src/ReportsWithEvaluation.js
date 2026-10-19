@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Radar, Pie } from 'react-chartjs-2';
+import { Radar, Pie, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   RadialLinearScale,
@@ -9,7 +9,10 @@ import {
   Filler,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  LinearScale
 } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { exportPlayerReport, exportCoachReport } from './PdfExportUtils';
@@ -38,8 +41,176 @@ ChartJS.register(
   Tooltip,
   Legend,
   ArcElement,
+  BarElement,
+  CategoryScale,
+  LinearScale,
   ChartDataLabels
 );
+
+
+// Graphique en barres : temps de travail individuel par joueur, filtrable par période
+const WORK_PERIODS = [
+  { label: '7 jours', value: 7 },
+  { label: '14 jours', value: 14 },
+  { label: '30 jours', value: 30 },
+  { label: '3 mois', value: 90 },
+  { label: '1 année', value: 365 },
+  { label: 'Tout', value: 0 }
+];
+
+const WorkTimeChart = () => {
+  const [players, setPlayers] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState(30);
+  const [team, setTeam] = useState('Pro');
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [pRes, sRes] = await Promise.all([
+          axios.get(`${API}/players`),
+          axios.get(`${API}/sessions`)
+        ]);
+        setPlayers(pRes.data);
+        setSessions(sRes.data);
+      } catch (e) {
+        console.error('Erreur chargement temps de travail:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const rows = React.useMemo(() => {
+    const limit = new Date();
+    limit.setHours(0, 0, 0, 0);
+    limit.setDate(limit.getDate() - (period || 0));
+    const limitKey = `${limit.getFullYear()}-${String(limit.getMonth() + 1).padStart(2, '0')}-${String(limit.getDate()).padStart(2, '0')}`;
+
+    const stats = {};
+    players.forEach(p => {
+      if (team !== 'all' && p.team !== team) return;
+      stats[p.id] = { name: `${p.first_name} ${p.last_name}`, mandatory: 0, optional: 0 };
+    });
+    sessions.forEach(sess => {
+      const d = String(sess.session_date || '').slice(0, 10);
+      if (period && d < limitKey) return;
+      const ids = sess.player_ids || (sess.player_id ? [sess.player_id] : []);
+      const minutes = sess.duration_minutes || 0;
+      ids.forEach(id => {
+        if (!stats[id]) return;
+        if (sess.is_mandatory === false) stats[id].optional += minutes;
+        else stats[id].mandatory += minutes;
+      });
+    });
+    return Object.values(stats)
+      .map(r => ({ ...r, total: r.mandatory + r.optional }))
+      .sort((a, b) => b.total - a.total);
+  }, [players, sessions, period, team]);
+
+  const totalMinutes = rows.reduce((sum, r) => sum + r.total, 0);
+  const average = rows.length ? Math.round(totalMinutes / rows.length) : 0;
+
+  const data = {
+    labels: rows.map(r => r.name),
+    datasets: [
+      { label: 'Obligatoire', data: rows.map(r => r.mandatory), backgroundColor: '#45bbc9', borderRadius: 4 },
+      { label: 'Facultatif', data: rows.map(r => r.optional), backgroundColor: '#a7e3ea', borderRadius: 4 }
+    ]
+  };
+
+  const options = {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      datalabels: { display: false },
+      legend: { position: 'bottom' },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label} : ${formatDuration(ctx.parsed.x)}`,
+          footer: (items) => `Total : ${formatDuration(items.reduce((s, i) => s + i.parsed.x, 0))}`
+        }
+      }
+    },
+    scales: {
+      x: {
+        stacked: true,
+        beginAtZero: true,
+        ticks: { callback: (v) => `${Math.round((v / 60) * 10) / 10}h` }
+      },
+      y: { stacked: true }
+    }
+  };
+
+  const btn = (active) =>
+    `px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+      active ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+    }`;
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-gray-800 mb-6">Temps de travail des joueurs</h1>
+
+      <div className="bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+        <div>
+          <div className="text-sm font-medium text-gray-700 mb-2">Période</div>
+          <div className="flex flex-wrap gap-2">
+            {WORK_PERIODS.map(o => (
+              <button key={o.value} onClick={() => setPeriod(o.value)} className={btn(period === o.value)}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-sm font-medium text-gray-700 mb-2">Équipe</div>
+          <div className="flex flex-wrap gap-2">
+            {[['Pro', 'Pro'], ['Partenaire', 'Partenaire'], ['all', 'Toutes']].map(([v, l]) => (
+              <button key={v} onClick={() => setTeam(v)} className={btn(team === v)}>{l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="bg-white rounded-2xl shadow-lg p-8 text-center text-gray-500">Chargement...</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-blue-50 p-4 rounded-xl">
+              <div className="text-sm text-blue-800 font-semibold">Temps total</div>
+              <div className="text-3xl font-bold text-blue-600">{formatDuration(totalMinutes)}</div>
+            </div>
+            <div className="bg-green-50 p-4 rounded-xl">
+              <div className="text-sm text-green-800 font-semibold">Moyenne par joueur</div>
+              <div className="text-3xl font-bold text-green-600">{formatDuration(average)}</div>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-xl">
+              <div className="text-sm text-purple-800 font-semibold">Joueurs</div>
+              <div className="text-3xl font-bold text-purple-600">{rows.length}</div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            {rows.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">Aucun joueur dans cette équipe.</p>
+            ) : (
+              <div style={{ height: Math.max(300, rows.length * 38 + 80) }}>
+                <Bar data={data} options={options} />
+              </div>
+            )}
+            <p className="text-xs text-gray-500 mt-4">
+              Durée cumulée des séances individuelles. Les séances sans durée renseignée ne sont pas comptées.
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const ReportsWithEvaluation = () => {
   const { canEdit } = useAuth();
@@ -719,9 +890,20 @@ const ReportsWithEvaluation = () => {
         >
           Comparer 2 joueurs
         </button>
+        <button
+          onClick={() => setActiveTab('worktime')}
+          className={`sub-nav-button ${
+            activeTab === 'worktime' 
+              ? 'sub-nav-button-active' 
+              : 'sub-nav-button-inactive'
+          }`}
+        >
+          Temps de travail
+        </button>
       </div>
 
       {/* Date Filter */}
+      {activeTab !== 'worktime' && (
       <div className="mb-6 bg-white p-4 rounded-xl shadow-lg">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Filtres de date</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
@@ -751,6 +933,9 @@ const ReportsWithEvaluation = () => {
           </button>
         </div>
       </div>
+      )}
+
+      {activeTab === 'worktime' && <WorkTimeChart />}
 
       {/* Player Reports Tab */}
       {activeTab === 'players' && (
